@@ -1,0 +1,15 @@
+[package]
+name = "diesel_survivors"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = "0.19"
+diesel_avian3d = { path = "../bevy_diesel/backends/diesel_avian3d", features = ["server", "diesel_diagnostics"] }
+# Required directly (not via the diesel umbrella) because gauge's derive macros
+# (`AttributeComponent`, `define_tags!`) emit `bevy_gauge::` paths, which need the
+# crate linked under that name in the consuming crate. The `avian3d` feature is
+# already enabled transitively by diesel_avian3d.
+bevy_gauge = { path = "../bevy_gauge" }
+avian3d = "0.7"
+rand = "0.9"

@@ -1,0 +1,6 @@
+# Mirrors the survivors project's patch set so the local diesel/gauge/bevy_scene
+# forks are used. bevy_scene is the vendored 0.19.0 + entity-reference merge-split
+# fix (registry deps, no path deps, so bevy_ecs is not duplicated in the graph).
+[patch.crates-io]
+bevy_gauge = { path = "../bevy_gauge" }
+bevy_scene = { path = "../bevy_scene_patched" }
