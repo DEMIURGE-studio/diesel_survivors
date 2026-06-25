@@ -241,12 +241,12 @@ fn configure_projectile_spawn(template_id: &'static str) -> impl Scene {
 
 /// Ready → Invoking (a `ProjectileCount`-long volley) → Cooldown.
 pub fn magic_missile() -> impl Scene {
-    invoked_with::<Vec3, _, _>(
+    invoked_with(
         "Magic Missile",
         MAGIC_MISSILE_COOLDOWN,
         ability_base(MAGIC_MISSILE_COOLDOWN, Some(MISSILE_SPEED), None),
         |root| {
-            repeater::<Vec3>(
+            repeater(
                 root,
                 "ProjectileCount@invoker",
                 "0.12 / AttackSpeed@invoker",
@@ -296,12 +296,12 @@ fn magic_missile_projectile() -> impl Scene {
 
 /// Ready → Invoking (single bolt) → Cooldown.
 pub fn firebolt() -> impl Scene {
-    invoked_with::<Vec3, _, _>(
+    invoked_with(
         "Firebolt",
         FIREBOLT_COOLDOWN,
         ability_base(FIREBOLT_COOLDOWN, Some(FIREBOLT_SPEED), None),
         |root| {
-            repeater::<Vec3>(
+            repeater(
                 root,
                 "ProjectileCount@invoker",
                 "0.12 / AttackSpeed@invoker",
@@ -351,12 +351,12 @@ fn firebolt_projectile() -> impl Scene {
 
 /// Ready → Invoking (single shard) → Cooldown.
 pub fn frost_shard() -> impl Scene {
-    invoked_with::<Vec3, _, _>(
+    invoked_with(
         "Frost Shard",
         FROST_SHARD_COOLDOWN,
         ability_base(FROST_SHARD_COOLDOWN, Some(FROST_SHARD_SPEED), None),
         |root| {
-            repeater::<Vec3>(
+            repeater(
                 root,
                 "ProjectileCount@invoker",
                 "0.12 / AttackSpeed@invoker",
@@ -414,12 +414,12 @@ fn configure_root_spawn(template_id: &'static str) -> impl Scene {
 }
 
 pub fn fireball() -> impl Scene {
-    invoked_with::<Vec3, _, _>(
+    invoked_with(
         "Fireball",
         FIREBALL_COOLDOWN,
         ability_base(FIREBALL_COOLDOWN, Some(FIREBALL_SPEED), Some(EXPLOSION_RADIUS)),
         |root| {
-            repeater::<Vec3>(
+            repeater(
                 root,
                 "ProjectileCount@invoker",
                 "0.12 / AttackSpeed@invoker",
@@ -499,12 +499,12 @@ fn fireball_explosion() -> impl Scene {
 // ---------------------------------------------------------------------------
 
 pub fn ice_storm() -> impl Scene {
-    invoked_with::<Vec3, _, _>(
+    invoked_with(
         "Ice Storm",
         ICE_STORM_COOLDOWN,
         ability_base(ICE_STORM_COOLDOWN, None, Some(STORM_RADIUS)),
         |root| {
-            repeater::<Vec3>(
+            repeater(
                 root,
                 "1",
                 "0.1 / AttackSpeed@invoker",
@@ -529,7 +529,7 @@ fn ice_storm_zone() -> impl Scene {
             #Pulsing Transitions [
                 (Target(#Done) MessageEdge::<Done>::default())
             ] Substates [
-                #Inner repeater::<Vec3>(
+                #Inner repeater(
                     #Root, STORM_PULSE_COUNT, "0.5 / AttackSpeed@invoker",
                     configure_root_spawn(FROST_PULSE),
                 ),

@@ -4,7 +4,7 @@
 //! a live ability entity.
 
 use bevy::prelude::*;
-use diesel_avian3d::gauge::prelude::{AttributeQueries, AttributesMut, InstantExt};
+use diesel_avian3d::gauge::prelude::{AttributesMut, InstantExt};
 use rand::Rng;
 
 use crate::ability::{AbilityId, AbilitySlots, SlotAbility};
