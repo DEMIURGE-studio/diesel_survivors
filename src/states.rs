@@ -7,6 +7,7 @@ use bevy::prelude::*;
 pub enum AppState {
     #[default]
     MainMenu,
+    Upgrades,
     CharSelect,
     Playing,
     GameOver,

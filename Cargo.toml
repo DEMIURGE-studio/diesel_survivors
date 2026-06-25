@@ -13,3 +13,5 @@ diesel_avian3d = { path = "../bevy_diesel/backends/diesel_avian3d", features = [
 bevy_gauge = { path = "../bevy_gauge" }
 avian3d = "0.7"
 rand = "0.9"
+serde = { version = "1", features = ["derive"] }
+ron = "0.8"

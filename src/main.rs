@@ -2,8 +2,22 @@
 //! bevy_diesel (abilities), bevy_gauge (attributes), and bevy_gearbox (state
 //! charts). Everything is authored as BSN scenes.
 
+mod ability;
+mod arena;
+mod attributes;
+mod characters;
+mod damage;
+mod enemy;
+mod game_over;
+mod hud;
 mod layers;
+mod menu;
+mod meta;
+mod player;
+mod progression;
+mod stats;
 mod states;
+mod ui;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -22,6 +36,8 @@ fn main() {
                 }),
                 ..default()
             }),
+            // PhysicsPlugins::default() already includes PhysicsInterpolationPlugin;
+            // bodies opt in per-entity via the `TransformInterpolation` component.
             PhysicsPlugins::default(),
             AvianBackend::plugin(),
             CollisionFilterPlugin::<TeamFilter>::default(),
@@ -29,6 +45,21 @@ fn main() {
         ))
         .init_state::<AppState>()
         .add_sub_state::<PlayingState>()
+        .init_resource::<characters::SelectedCharacter>()
+        .add_plugins((
+            attributes::AttributesPlugin,
+            damage::DamagePlugin,
+            arena::ArenaPlugin,
+            player::PlayerPlugin,
+            enemy::EnemyPlugin,
+            ability::AbilityPlugin,
+            game_over::GameOverPlugin,
+            menu::MenuPlugin,
+            progression::ProgressionPlugin,
+            meta::MetaPlugin,
+            hud::HudPlugin,
+            ui::UiPlugin,
+        ))
         .insert_resource(ClearColor(Color::srgb(0.06, 0.06, 0.08)))
         .add_systems(Startup, setup_camera)
         .run();
@@ -40,6 +71,11 @@ fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Name::new("MainCamera"),
         Camera3d::default(),
-        Transform::from_xyz(0.0, 24.0, 0.0).looking_at(Vec3::ZERO, Vec3::NEG_Z),
+        Transform::from_translation(player::CAMERA_OFFSET).looking_at(Vec3::ZERO, Vec3::Y),
+        AmbientLight {
+            color: Color::WHITE,
+            brightness: 220.0,
+            ..default()
+        },
     ));
 }
