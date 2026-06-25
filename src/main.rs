@@ -5,8 +5,8 @@
 mod ability;
 mod arena;
 mod attributes;
-mod characters;
 mod damage;
+mod data;
 mod enemy;
 mod game_over;
 mod hud;
@@ -45,7 +45,7 @@ fn main() {
         ))
         .init_state::<AppState>()
         .add_sub_state::<PlayingState>()
-        .init_resource::<characters::SelectedCharacter>()
+        .init_resource::<data::characters::SelectedCharacter>()
         .add_plugins((
             attributes::AttributesPlugin,
             damage::DamagePlugin,

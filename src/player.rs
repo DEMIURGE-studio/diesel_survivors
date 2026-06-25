@@ -1,21 +1,20 @@
-//! The player: a fresh kinematic, interpolation-smoothed top-down controller.
+//! The player: a fresh kinematic, interpolation-smoothed top-down controller. The
+//! entity itself is authored as a per-character BSN scene (see
+//! [`crate::data::characters::player_scene`]); this module owns the marker, the
+//! input/movement systems, and the camera.
 //!
 //! Movement is integer-simple: sample WASD each frame into [`MoveInput`], then
 //! in `FixedUpdate` set the kinematic body's `LinearVelocity` to
-//! `direction * MoveSpeed`. Avian's transform interpolation (enabled app-wide in
-//! `main`) smooths the fixed-step motion across render frames, so the character
-//! glides regardless of the physics tick rate.
+//! `direction * MoveSpeed`. Avian's transform interpolation smooths the
+//! fixed-step motion across render frames, so the character glides regardless of
+//! the physics tick rate.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use diesel_avian3d::gauge::prelude::AttributeInitializer;
-use diesel_avian3d::prelude::*;
+use bevy::scene::prelude::CommandsSceneExt;
 
-use crate::ability::AbilitySlots;
-use crate::attributes::{Health, MoveSpeed, PickupRadius};
-use crate::characters::SelectedCharacter;
-use crate::layers::{Layer, Team};
-use crate::meta::MetaProgress;
+use crate::attributes::MoveSpeed;
+use crate::data::characters::{player_scene, SelectedCharacter};
 use crate::states::AppState;
 
 /// Marker for the player-controlled character.
@@ -43,43 +42,8 @@ impl Plugin for PlayerPlugin {
     }
 }
 
-fn spawn_player(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    selected: Res<SelectedCharacter>,
-    meta: Res<MetaProgress>,
-) {
-    // Character baseline + scaling, then permanent metaprogression bonuses.
-    let mut stats = selected.0.mod_set();
-    meta.apply_to(&mut stats);
-
-    commands.spawn((
-        Name::new("Player"),
-        Player,
-        Team::player(),
-        MoveInput::default(),
-        InvokerTarget::position(Vec3::ZERO),
-        Health::default(),
-        MoveSpeed::default(),
-        PickupRadius::default(),
-        AbilitySlots::with_starter(selected.0.starter_ability()),
-        AttributeInitializer::new(stats),
-        // Visuals.
-        Mesh3d(meshes.add(Capsule3d::new(0.4, 0.8))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.35, 0.7, 1.0),
-            ..default()
-        })),
-        Transform::from_xyz(0.0, 0.7, 0.0),
-        // Physics: kinematic body driven by velocity, smoothed by interpolation.
-        (
-            RigidBody::Kinematic,
-            Collider::capsule(0.4, 0.8),
-            CollisionLayers::new([Layer::Character], LayerMask::ALL),
-            TransformInterpolation,
-        ),
-    ));
+fn spawn_player(mut commands: Commands, selected: Res<SelectedCharacter>) {
+    commands.spawn_scene(player_scene(selected.0));
 }
 
 /// Sample WASD into a normalized ground-plane direction. Camera looks down -Y,

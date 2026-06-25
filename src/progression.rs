@@ -7,8 +7,9 @@ use bevy::prelude::*;
 use diesel_avian3d::gauge::prelude::{AttributesMut, InstantExt};
 use rand::Rng;
 
-use crate::ability::{AbilityId, AbilitySlots, SlotAbility};
+use crate::ability::{AbilitySlots, SlotAbility};
 use crate::attributes::{Died, PickupRadius};
+use crate::data::abilities::{AbilityDef, ALL};
 use crate::enemy::Enemy;
 use crate::player::Player;
 use crate::states::{AppState, PlayingState};
@@ -105,6 +106,18 @@ const ABILITY_STATS: [AbilityStat; 4] = [
     AbilityStat { label: "Speed", stat: "ProjectileSpeedBase", op: Op::AddPct },
 ];
 
+/// Whether `def` exposes the stat at `ABILITY_STATS[idx]` for a rank-up (Damage is
+/// always rankable; the rest follow the ability's declared `stats`).
+fn ability_has_stat(def: &AbilityDef, idx: usize) -> bool {
+    match idx {
+        0 => true,
+        1 => def.stats.cooldown,
+        2 => def.stats.area,
+        3 => def.stats.projectile_speed,
+        _ => false,
+    }
+}
+
 /// A player-wide passive upgrade (applied to the player's global stat, so it
 /// scales every ability or the character itself at once).
 struct GlobalUpgrade {
@@ -130,9 +143,9 @@ const GLOBAL_UPGRADES: [GlobalUpgrade; 9] = [
 #[derive(Clone, Copy)]
 enum DraftOption {
     /// Slot a not-yet-equipped ability.
-    Equip(AbilityId),
+    Equip(&'static AbilityDef),
     /// Buff one stat of an owned ability (instant on the spell entity).
-    AbilityUp { id: AbilityId, stat: usize, tier: Tier },
+    AbilityUp { def: &'static AbilityDef, stat: usize, tier: Tier },
     /// Buff a player-wide passive (instant on the player).
     Global { kind: usize, tier: Tier },
 }
@@ -149,10 +162,10 @@ fn magnitude_label(op: Op, pct: f32) -> String {
 impl DraftOption {
     fn label(&self) -> String {
         match self {
-            DraftOption::Equip(id) => format!("{} — New", id.name()),
-            DraftOption::AbilityUp { id, stat, tier } => {
+            DraftOption::Equip(def) => format!("{} — New", def.name),
+            DraftOption::AbilityUp { def, stat, tier } => {
                 let s = &ABILITY_STATS[*stat];
-                format!("{} — {} {} {}", id.name(), tier.label, magnitude_label(s.op, tier.pct), s.label)
+                format!("{} — {} {} {}", def.name, tier.label, magnitude_label(s.op, tier.pct), s.label)
             }
             DraftOption::Global { kind, tier } => {
                 let g = &GLOBAL_UPGRADES[*kind];
@@ -307,38 +320,32 @@ fn check_level_up(
 fn open_draft(
     mut draft: ResMut<Draft>,
     player: Query<&AbilitySlots, With<Player>>,
-    q_ability: Query<(Entity, &SlotAbility)>,
-    mut attrs: AttributesMut,
     mut commands: Commands,
 ) {
     let Ok(slots) = player.single() else {
         return;
     };
-    let equipped: Vec<AbilityId> = slots.equipped().collect();
+    let equipped: Vec<&'static AbilityDef> = slots.equipped().collect();
     let mut rng = rand::rng();
 
     let mut pool: Vec<DraftOption> = Vec::new();
 
     // Equip a not-yet-owned ability (only while a slot is free).
     if !slots.is_full() {
-        pool.extend(
-            AbilityId::ALL
-                .into_iter()
-                .filter(|id| !equipped.contains(id))
-                .map(DraftOption::Equip),
-        );
+        for def in ALL {
+            if !equipped.iter().any(|d| d.same(def)) {
+                pool.push(DraftOption::Equip(def));
+            }
+        }
     }
 
-    // Per-ability stat rank-ups — offer a stat only if the live spell carries it
-    // (e.g. `AreaBase` exists on AoE abilities, `ProjectileSpeedBase` on projectile
-    // abilities, the sustained blade has only `Damage`).
-    for (spell, slot) in &q_ability {
-        let Some(a) = attrs.get_attributes(spell) else {
-            continue;
-        };
-        for (idx, st) in ABILITY_STATS.iter().enumerate() {
-            if a.value(st.stat) > 0.0 {
-                pool.push(DraftOption::AbilityUp { id: slot.0, stat: idx, tier: roll_tier(&mut rng) });
+    // Per-ability stat rank-ups — offer a stat only if the ability declares it
+    // (only AoE abilities have Area, only projectile abilities have Speed, the
+    // sustained blade has only Damage).
+    for &def in &equipped {
+        for idx in 0..ABILITY_STATS.len() {
+            if ability_has_stat(def, idx) {
+                pool.push(DraftOption::AbilityUp { def, stat: idx, tier: roll_tier(&mut rng) });
             }
         }
     }
@@ -395,11 +402,11 @@ fn pick_draft(
         return;
     };
     match option {
-        DraftOption::Equip(id) => {
-            slots.equip(id);
+        DraftOption::Equip(def) => {
+            slots.equip(def);
         }
-        DraftOption::AbilityUp { id, stat, tier } => {
-            if let Some((entity, _)) = q_ability.iter().find(|(_, slot)| slot.0 == id) {
+        DraftOption::AbilityUp { def, stat, tier } => {
+            if let Some((entity, _)) = q_ability.iter().find(|(_, slot)| slot.0.same(def)) {
                 let s = &ABILITY_STATS[stat];
                 apply_op(s.stat, s.op, tier.pct, entity, attributes);
             }

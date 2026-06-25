@@ -3,7 +3,7 @@
 
 use bevy::prelude::*;
 
-use crate::characters::{CharacterId, SelectedCharacter, CHARACTERS};
+use crate::data::characters::{self, Character, SelectedCharacter};
 use crate::states::AppState;
 use crate::ui::{button, label, screen, title, GotoState};
 
@@ -24,9 +24,9 @@ impl Plugin for MenuPlugin {
     }
 }
 
-/// Button id carrying which character it selects.
+/// Button carrying which character it selects.
 #[derive(Component, Clone, Copy)]
-struct CharButton(CharacterId);
+struct CharButton(Character);
 
 fn spawn_main_menu(mut commands: Commands) {
     commands.spawn(screen(AppState::MainMenu)).with_children(|p| {
@@ -54,8 +54,8 @@ fn spawn_char_select(mut commands: Commands) {
         .spawn(screen(AppState::CharSelect))
         .with_children(|p| {
             p.spawn(title("Choose Your Survivor"));
-            for character in &CHARACTERS {
-                p.spawn(button(character.name, CharButton(character.id)));
+            for character in characters::all() {
+                p.spawn(button(character.name, CharButton(character)));
                 p.spawn(label(character.blurb, 18.0, Color::srgb(0.65, 0.65, 0.65)));
             }
             p.spawn(label(
@@ -66,8 +66,8 @@ fn spawn_char_select(mut commands: Commands) {
         });
 }
 
-fn begin_run(commands: &mut Commands, next: &mut NextState<AppState>, id: CharacterId) {
-    commands.insert_resource(SelectedCharacter(id));
+fn begin_run(commands: &mut Commands, next: &mut NextState<AppState>, character: Character) {
+    commands.insert_resource(SelectedCharacter(character));
     next.set(AppState::Playing);
 }
 
@@ -76,15 +76,16 @@ fn char_select_keys(
     mut commands: Commands,
     mut next: ResMut<NextState<AppState>>,
 ) {
+    let roster = characters::all();
     let pick = if keys.just_pressed(KeyCode::Digit1) {
-        Some(CHARACTERS[0].id)
+        Some(roster[0])
     } else if keys.just_pressed(KeyCode::Digit2) {
-        Some(CHARACTERS[1].id)
+        Some(roster[1])
     } else {
         None
     };
-    if let Some(id) = pick {
-        begin_run(&mut commands, &mut next, id);
+    if let Some(character) = pick {
+        begin_run(&mut commands, &mut next, character);
     }
 }
 
