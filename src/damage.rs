@@ -14,6 +14,7 @@ use diesel_avian3d::gauge::prelude::*;
 use diesel_avian3d::prelude::*;
 
 use crate::attributes::Health;
+use crate::layers::{Team, TeamFilter};
 
 define_tags! {
     DamageTags,
@@ -81,13 +82,54 @@ fn setup_tags(mut resolver: ResMut<TagResolver>) {
     DamageTags::register(&mut resolver);
 }
 
+/// Walk the `InvokedBy` chain from an effect to the first `TeamFilter`.
+fn find_team_filter<'a>(
+    start: Entity,
+    q_filter: &'a Query<&TeamFilter>,
+    q_invoked_by: &Query<&InvokedBy>,
+) -> Option<&'a TeamFilter> {
+    let mut entity = start;
+    loop {
+        if let Ok(filter) = q_filter.get(entity) {
+            return Some(filter);
+        }
+        match q_invoked_by.get(entity) {
+            Ok(invoked_by) => entity = invoked_by.0,
+            Err(_) => return None,
+        }
+    }
+}
+
+/// Walk the `InvokedBy` chain from an effect to the owning ability (first
+/// `Ability`). The chain is preserved across spawns, so this resolves to the
+/// top-level spell — the entity whose `Damage` multiplier `@ability` should read.
+fn find_owning_ability(
+    start: Entity,
+    q_ability: &Query<(), With<Ability>>,
+    q_invoked_by: &Query<&InvokedBy>,
+) -> Option<Entity> {
+    let mut entity = start;
+    loop {
+        if q_ability.get(entity).is_ok() {
+            return Some(entity);
+        }
+        match q_invoked_by.get(entity) {
+            Ok(invoked_by) => entity = invoked_by.0,
+            Err(_) => return None,
+        }
+    }
+}
+
 /// Reads `GoOff`, resolves the `DamageEffect`, evaluates damage, and subtracts
-/// from the defender's `Health`. Team gating already happened at the collision
-/// layer (`TeamFilter`), so a `GoOff` here is always a valid hit.
+/// from the defender's `Health`. Re-checks the ability's `TeamFilter` here too,
+/// since area-gathered targets (AoE) bypass the collision-layer team check.
 fn damage_effect_system(
     mut reader: MessageReader<GoOff>,
     q_effect: Query<&DamageEffect>,
     q_invoked_by: Query<&InvokedBy>,
+    q_ability: Query<(), With<Ability>>,
+    q_filter: Query<&TeamFilter>,
+    q_team: Query<&Team>,
     mut q_health: Query<&mut Health>,
     mut attributes: AttributesMut,
 ) {
@@ -100,6 +142,19 @@ fn damage_effect_system(
             continue;
         };
         let attacker = q_invoked_by.root_ancestor(effect_entity);
+        // `@ability` = the owning spell (its per-ability `Damage` multiplier), not
+        // the leaf effect entity. Falls back to the effect for non-ability sources.
+        let ability = find_owning_ability(effect_entity, &q_ability, &q_invoked_by)
+            .unwrap_or(effect_entity);
+
+        // Team gate: skip if the ability's filter rejects attacker → defender.
+        if let Some(filter) = find_team_filter(effect_entity, &q_filter, &q_invoked_by) {
+            let invoker_team = q_team.get(attacker).ok();
+            let target_team = q_team.get(defender).ok();
+            if !filter.can_target(invoker_team, target_team) {
+                continue;
+            }
+        }
 
         let Ok(expr) = Expr::compile(&effect.expr, None) else {
             warn!("DamageEffect: failed to compile expr '{}'", effect.expr);
@@ -111,7 +166,7 @@ fn damage_effect_system(
             ("invoker", attacker),
             ("defender", defender),
             ("target", defender),
-            ("ability", effect_entity),
+            ("ability", ability),
         ];
         let scope_extras: Vec<(&str, f32)> =
             go_off.scope.iter().map(|&(k, v)| (k, v)).collect();

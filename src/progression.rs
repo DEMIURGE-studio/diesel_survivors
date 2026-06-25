@@ -4,8 +4,10 @@
 //! a live ability entity.
 
 use bevy::prelude::*;
+use diesel_avian3d::gauge::prelude::{AttributesMut, InstantExt};
+use rand::Rng;
 
-use crate::ability::{AbilityId, AbilitySlots};
+use crate::ability::{AbilityId, AbilitySlots, SlotAbility};
 use crate::attributes::{Died, PickupRadius};
 use crate::enemy::Enemy;
 use crate::player::Player;
@@ -33,10 +35,61 @@ impl Default for Experience {
     }
 }
 
-/// The abilities offered on the current level-up screen.
+/// A rarity tier for a rolled rank-up: rarer tiers grant a bigger damage bonus.
+#[derive(Clone, Copy)]
+struct Tier {
+    label: &'static str,
+    /// Added to the ability's `1.0`-based `Damage` multiplier.
+    damage_bonus: f32,
+    /// Relative roll weight.
+    weight: u32,
+}
+
+const TIERS: [Tier; 3] = [
+    Tier { label: "Common", damage_bonus: 0.20, weight: 60 },
+    Tier { label: "Rare", damage_bonus: 0.35, weight: 30 },
+    Tier { label: "Legendary", damage_bonus: 0.50, weight: 10 },
+];
+
+/// Weighted roll over [`TIERS`].
+fn roll_tier(rng: &mut impl Rng) -> Tier {
+    let total: u32 = TIERS.iter().map(|t| t.weight).sum();
+    let mut r = rng.random_range(0..total);
+    for tier in &TIERS {
+        if r < tier.weight {
+            return *tier;
+        }
+        r -= tier.weight;
+    }
+    TIERS[0]
+}
+
+/// One choice on the level-up screen: equip a new ability, or rank up an owned
+/// one with a pre-rolled tier (so the offered upgrade is fixed and shown).
+#[derive(Clone, Copy)]
+enum DraftOption {
+    Equip(AbilityId),
+    RankUp(AbilityId, Tier),
+}
+
+impl DraftOption {
+    fn label(&self) -> String {
+        match self {
+            DraftOption::Equip(id) => format!("{} — New", id.name()),
+            DraftOption::RankUp(id, tier) => format!(
+                "{} — {} +{}% Damage",
+                id.name(),
+                tier.label,
+                (tier.damage_bonus * 100.0).round() as i32,
+            ),
+        }
+    }
+}
+
+/// The choices offered on the current level-up screen.
 #[derive(Resource, Default)]
 struct Draft {
-    options: Vec<AbilityId>,
+    options: Vec<DraftOption>,
 }
 
 #[derive(Component)]
@@ -157,11 +210,10 @@ fn despawn_gems(mut commands: Commands, gems: Query<Entity, With<XpGem>>) {
     }
 }
 
-/// Consume XP and level up. Only pauses for a draft when a slot is free (with a
-/// 3-ability pool, a free slot guarantees at least one unequipped option).
+/// Consume XP and level up, then open the draft. There's always at least one
+/// owned ability to rank up (the starter), so a draft is always offered.
 fn check_level_up(
     mut xp: ResMut<Experience>,
-    player: Query<&AbilitySlots, With<Player>>,
     mut next: ResMut<NextState<PlayingState>>,
 ) {
     if xp.current < xp.to_next {
@@ -170,26 +222,45 @@ fn check_level_up(
     xp.current -= xp.to_next;
     xp.level += 1;
     xp.to_next += 2;
-
-    let slot_free = player.single().map(|s| !s.is_full()).unwrap_or(false);
-    if slot_free {
-        next.set(PlayingState::LevelUp);
-    }
+    next.set(PlayingState::LevelUp);
 }
 
+/// Build the draft pool — equip options for empty slots, a freshly-rolled rank-up
+/// for each owned ability — then offer up to three distinct picks.
 fn open_draft(
     mut draft: ResMut<Draft>,
     player: Query<&AbilitySlots, With<Player>>,
     mut commands: Commands,
 ) {
-    let equipped: Vec<AbilityId> = player
-        .single()
-        .map(|s| s.equipped().collect())
-        .unwrap_or_default();
-    draft.options = AbilityId::ALL
-        .into_iter()
-        .filter(|id| !equipped.contains(id))
-        .collect();
+    let Ok(slots) = player.single() else {
+        return;
+    };
+    let equipped: Vec<AbilityId> = slots.equipped().collect();
+    let mut rng = rand::rng();
+
+    let mut pool: Vec<DraftOption> = Vec::new();
+    if !slots.is_full() {
+        pool.extend(
+            AbilityId::ALL
+                .into_iter()
+                .filter(|id| !equipped.contains(id))
+                .map(DraftOption::Equip),
+        );
+    }
+    pool.extend(
+        equipped
+            .iter()
+            .map(|&id| DraftOption::RankUp(id, roll_tier(&mut rng))),
+    );
+
+    // Partial Fisher–Yates: surface up to three distinct options.
+    let offered = pool.len().min(3);
+    for i in 0..offered {
+        let j = rng.random_range(i..pool.len());
+        pool.swap(i, j);
+    }
+    pool.truncate(offered);
+    draft.options = pool;
 
     commands
         .spawn((
@@ -206,30 +277,64 @@ fn open_draft(
             BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
         ))
         .with_children(|p| {
-            p.spawn(title("Level Up! Choose an Ability"));
-            for (i, id) in draft.options.iter().enumerate() {
-                p.spawn(button(id.name(), DraftButton(i)));
+            p.spawn(title("Level Up! Choose an Upgrade"));
+            for (i, option) in draft.options.iter().enumerate() {
+                p.spawn(button(&option.label(), DraftButton(i)));
             }
         });
 }
 
-fn pick_draft(slots: &mut AbilitySlots, draft: &Draft, index: usize, next: &mut NextState<PlayingState>) {
-    if let Some(id) = draft.options.get(index) {
-        slots.equip(*id);
-        next.set(PlayingState::Running);
+/// Resolve a draft pick: equip a new ability, or apply the rolled rank-up instant
+/// to the live ability entity's `Damage` (which its effects read as
+/// `Damage@ability`). Returns once handled so the caller leaves the draft.
+fn pick_draft(
+    index: usize,
+    draft: &Draft,
+    slots: &mut AbilitySlots,
+    q_ability: &Query<(Entity, &SlotAbility)>,
+    attributes: &mut AttributesMut,
+    next: &mut NextState<PlayingState>,
+) {
+    let Some(&option) = draft.options.get(index) else {
+        return;
+    };
+    match option {
+        DraftOption::Equip(id) => {
+            slots.equip(id);
+        }
+        DraftOption::RankUp(id, tier) => {
+            if let Some((entity, _)) = q_ability.iter().find(|(_, slot)| slot.0 == id) {
+                let bonus = tier.damage_bonus;
+                attributes.apply_instant(
+                    &bevy_gauge::instant! { "Damage" += bonus },
+                    &[],
+                    entity,
+                );
+            }
+        }
     }
+    next.set(PlayingState::Running);
 }
 
 fn draft_button_clicks(
     buttons: Query<(&Interaction, &DraftButton), (Changed<Interaction>, With<Button>)>,
     draft: Res<Draft>,
     mut player: Query<&mut AbilitySlots, With<Player>>,
+    q_ability: Query<(Entity, &SlotAbility)>,
+    mut attributes: AttributesMut,
     mut next: ResMut<NextState<PlayingState>>,
 ) {
     for (interaction, draft_button) in &buttons {
         if *interaction == Interaction::Pressed {
             if let Ok(mut slots) = player.single_mut() {
-                pick_draft(&mut slots, &draft, draft_button.0, &mut next);
+                pick_draft(
+                    draft_button.0,
+                    &draft,
+                    &mut slots,
+                    &q_ability,
+                    &mut attributes,
+                    &mut next,
+                );
             }
         }
     }
@@ -247,13 +352,15 @@ fn draft_input(
     keys: Res<ButtonInput<KeyCode>>,
     draft: Res<Draft>,
     mut player: Query<&mut AbilitySlots, With<Player>>,
+    q_ability: Query<(Entity, &SlotAbility)>,
+    mut attributes: AttributesMut,
     mut next: ResMut<NextState<PlayingState>>,
 ) {
     const DIGITS: [KeyCode; 3] = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3];
     for (i, key) in DIGITS.iter().enumerate() {
         if keys.just_pressed(*key) {
             if let Ok(mut slots) = player.single_mut() {
-                pick_draft(&mut slots, &draft, i, &mut next);
+                pick_draft(i, &draft, &mut slots, &q_ability, &mut attributes, &mut next);
             }
         }
     }

@@ -9,7 +9,6 @@
 //! Auto-fire (VS-style) is just spamming `StartInvoke` at the player's abilities
 //! every frame; each ability's Cooldown state rate-limits itself.
 
-use std::time::Duration;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -25,18 +24,50 @@ use crate::states::PlayingState;
 
 const MAGIC_MISSILE_PROJECTILE: &str = "abilities/magic_missile";
 const MISSILE_SPEED: f32 = 18.0;
-const MAGIC_MISSILE_COOLDOWN: Duration = Duration::from_millis(800);
+const MAGIC_MISSILE_COOLDOWN: f32 = 0.8;
 
 const FIREBOLT_PROJECTILE: &str = "abilities/firebolt";
 const FIREBOLT_SPEED: f32 = 13.0;
-const FIREBOLT_COOLDOWN: Duration = Duration::from_millis(1100);
+const FIREBOLT_COOLDOWN: f32 = 1.1;
 
 const FROST_SHARD_PROJECTILE: &str = "abilities/frost_shard";
 const FROST_SHARD_SPEED: f32 = 22.0;
-const FROST_SHARD_COOLDOWN: Duration = Duration::from_millis(500);
+const FROST_SHARD_COOLDOWN: f32 = 0.5;
+
+const FIREBALL_PROJECTILE: &str = "abilities/fireball_projectile";
+const FIREBALL_EXPLOSION: &str = "abilities/fireball_explosion";
+const FIREBALL_SPEED: f32 = 12.0;
+const FIREBALL_COOLDOWN: f32 = 1.3;
+const EXPLOSION_RADIUS: f32 = 3.0;
+
+const ICE_STORM_ZONE: &str = "abilities/ice_storm_zone";
+const FROST_PULSE: &str = "abilities/frost_pulse";
+const ICE_STORM_COOLDOWN: f32 = 4.0;
+const STORM_RADIUS: f32 = 3.2;
+const STORM_PULSE_COUNT: &str = "8";
+const STORM_PULSE_INTERVAL: f32 = 0.5;
+
+const BLADE_ORBIT_RADIUS: f32 = 2.2;
+const BLADE_ORBIT_SPEED: f32 = 3.5;
 
 /// Number of ability slots a character runs at once.
 pub const SLOT_COUNT: usize = 3;
+
+/// Despawns its entity once the timer finishes. Used by transient AoE bursts.
+#[derive(Component)]
+pub struct Lifetime(Timer);
+
+impl Lifetime {
+    fn secs(secs: f32) -> Self {
+        Self(Timer::from_seconds(secs, TimerMode::Once))
+    }
+}
+
+/// A blade that circles its invoker. The orbit system advances `angle`.
+#[derive(Component, Default, Clone)]
+pub struct Orbiter {
+    angle: f32,
+}
 
 // ---------------------------------------------------------------------------
 // Cached visual handles for hot-spawned projectiles
@@ -50,6 +81,14 @@ struct ProjectileAssets {
     firebolt_material: Handle<StandardMaterial>,
     frost_mesh: Handle<Mesh>,
     frost_material: Handle<StandardMaterial>,
+    explosion_mesh: Handle<Mesh>,
+    explosion_material: Handle<StandardMaterial>,
+    pulse_mesh: Handle<Mesh>,
+    pulse_material: Handle<StandardMaterial>,
+    storm_mesh: Handle<Mesh>,
+    storm_material: Handle<StandardMaterial>,
+    blade_mesh: Handle<Mesh>,
+    blade_material: Handle<StandardMaterial>,
 }
 
 /// Marks a projectile that steers toward its target entity each frame.
@@ -67,13 +106,19 @@ pub enum AbilityId {
     MagicMissile,
     Firebolt,
     FrostShard,
+    Fireball,
+    OrbitingBlade,
+    IceStorm,
 }
 
 impl AbilityId {
-    pub const ALL: [AbilityId; 3] = [
+    pub const ALL: [AbilityId; 6] = [
         AbilityId::MagicMissile,
         AbilityId::Firebolt,
         AbilityId::FrostShard,
+        AbilityId::Fireball,
+        AbilityId::OrbitingBlade,
+        AbilityId::IceStorm,
     ];
 
     pub fn name(self) -> &'static str {
@@ -81,6 +126,9 @@ impl AbilityId {
             AbilityId::MagicMissile => "Magic Missile",
             AbilityId::Firebolt => "Firebolt",
             AbilityId::FrostShard => "Frost Shard",
+            AbilityId::Fireball => "Fireball",
+            AbilityId::OrbitingBlade => "Orbiting Blade",
+            AbilityId::IceStorm => "Ice Storm",
         }
     }
 
@@ -90,6 +138,9 @@ impl AbilityId {
             AbilityId::MagicMissile => Box::new(magic_missile()),
             AbilityId::Firebolt => Box::new(firebolt()),
             AbilityId::FrostShard => Box::new(frost_shard()),
+            AbilityId::Fireball => Box::new(fireball()),
+            AbilityId::OrbitingBlade => Box::new(orbiting_blade()),
+            AbilityId::IceStorm => Box::new(ice_storm()),
         }
     }
 }
@@ -202,7 +253,7 @@ fn magic_missile_projectile() -> impl Scene {
                 (SubEffectOf(#Hit) InvokedBy(#Root)
                     Name::new("DealDamage")
                     HitEffect
-                    DamageEffect::arcane("Damage@invoker")),
+                    DamageEffect::arcane("Damage@invoker * Damage@ability")),
             ] Transitions [
                 (Target(#Done) AlwaysEdge)
             ],
@@ -251,7 +302,7 @@ fn firebolt_projectile() -> impl Scene {
                 (SubEffectOf(#Hit) InvokedBy(#Root)
                     Name::new("DealDamage")
                     HitEffect
-                    DamageEffect::fire("Damage@invoker")),
+                    DamageEffect::fire("Damage@invoker * Damage@ability")),
             ] Transitions [
                 (Target(#Done) AlwaysEdge)
             ],
@@ -299,11 +350,210 @@ fn frost_shard_projectile() -> impl Scene {
                 (SubEffectOf(#Hit) InvokedBy(#Root)
                     Name::new("DealDamage")
                     HitEffect
-                    DamageEffect::cold("Damage@invoker")),
+                    DamageEffect::cold("Damage@invoker * Damage@ability")),
             ] Transitions [
                 (Target(#Done) AlwaysEdge)
             ],
             #Done state(DelayedDespawn::now()),
+        ]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Fireball — projectile that bursts into an AoE explosion on impact
+// ---------------------------------------------------------------------------
+
+/// Firing leaf that spawns a template at the aimed position (not the invoker).
+fn configure_zone_spawn(template_id: &'static str) -> impl Scene {
+    bsn! { SpawnConfig::target(template_id) }
+}
+
+/// Firing leaf that spawns a template at the spawner's own root position.
+fn configure_root_spawn(template_id: &'static str) -> impl Scene {
+    bsn! { SpawnConfig::root(template_id) }
+}
+
+pub fn fireball() -> impl Scene {
+    invoked_with::<Vec3, _, _>(
+        "Fireball",
+        FIREBALL_COOLDOWN,
+        bevy_gauge::mod_set! { "Area" => EXPLOSION_RADIUS },
+        |root| {
+            repeater::<Vec3>(
+                root,
+                "ProjectileCount@invoker",
+                0.12,
+                configure_projectile_spawn(FIREBALL_PROJECTILE),
+            )
+        },
+    )
+}
+
+/// Slow fire projectile; on hit it spawns an explosion at the impact point and
+/// deals no direct damage (the explosion does the work).
+fn fireball_projectile() -> impl Scene {
+    bsn! {
+        #Root
+            Name::new("Fireball")
+            LinearProjectileEffect { speed: FIREBALL_SPEED, horizontal: true }
+            Homing
+            TeamFilter::Enemies
+            CollisionLayers::new([Layer::Projectile], [Layer::Character])
+            Collider::sphere(0.3)
+            Visibility::Inherited
+            template(|ctx| Ok(Mesh3d(ctx.resource::<ProjectileAssets>().firebolt_mesh.clone())))
+            template(|ctx| Ok(MeshMaterial3d(ctx.resource::<ProjectileAssets>().firebolt_material.clone())))
+            StateMachine InitialState(#Flying)
+        Substates [
+            #Flying Transitions [
+                (Target(#Hit) MessageEdge::<CollidedEntity>::default()),
+                (Target(#Done) AlwaysEdge Delay::from_secs_f32(3.0)),
+            ],
+            #Hit Substates [
+                (SubEffectOf(#Hit) InvokedBy(#Root)
+                    Name::new("SpawnExplosion")
+                    SpawnConfig::passed(FIREBALL_EXPLOSION)),
+            ] Transitions [
+                (Target(#Done) AlwaysEdge)
+            ],
+            #Done state(DelayedDespawn::now()),
+        ]
+    }
+}
+
+/// One-shot AoE: on entry, gathers every entity in radius and burns it, then
+/// fades out after a short lifetime.
+fn fireball_explosion() -> impl Scene {
+    bsn! {
+        #Root
+            Name::new("Explosion")
+            TeamFilter::Enemies
+            Visibility::Inherited
+            template(|_| Ok(Lifetime::secs(0.35)))
+            template(|ctx| Ok(Mesh3d(ctx.resource::<ProjectileAssets>().explosion_mesh.clone())))
+            template(|ctx| Ok(MeshMaterial3d(ctx.resource::<ProjectileAssets>().explosion_material.clone())))
+            StateMachine InitialState(#Active)
+        Substates [
+            #Active GoOffConfig::default()
+            Substates [
+                #AoE SubEffectOf(#Active) InvokedBy(#Root)
+                    TargetMutator::root_gathering(AvianGatherer::AllEntitiesInRadius(EXPLOSION_RADIUS))
+                    // Gauge-drive the gather radius: the gatherer's single field
+                    // resolves against `"TargetMutator.gatherer"`, aliased here to
+                    // the spell's `Area` so an upgrade scales every explosion.
+                    template(|_| Ok(bevy_gauge::attributes! { "TargetMutator.gatherer" => "Area@ability" }))
+                Substates [
+                    (SubEffectOf(#AoE) InvokedBy(#Root)
+                        Name::new("Burn")
+                        HitEffect
+                        DamageEffect::fire("Damage@invoker * Damage@ability * 1.5")),
+                ],
+            ],
+        ]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Ice Storm — a placed zone that pulses cold AoE for a few seconds
+// ---------------------------------------------------------------------------
+
+pub fn ice_storm() -> impl Scene {
+    invoked_with::<Vec3, _, _>(
+        "Ice Storm",
+        ICE_STORM_COOLDOWN,
+        bevy_gauge::mod_set! { "Area" => STORM_RADIUS },
+        |root| repeater::<Vec3>(root, "1", 0.1, configure_zone_spawn(ICE_STORM_ZONE)),
+    )
+}
+
+/// The zone: a repeater spawns a frost pulse at its position every tick, then it
+/// despawns when the volley is done.
+fn ice_storm_zone() -> impl Scene {
+    bsn! {
+        #Root
+            Name::new("IceStorm")
+            TeamFilter::Enemies
+            Visibility::Inherited
+            template(|ctx| Ok(Mesh3d(ctx.resource::<ProjectileAssets>().storm_mesh.clone())))
+            template(|ctx| Ok(MeshMaterial3d(ctx.resource::<ProjectileAssets>().storm_material.clone())))
+            StateMachine InitialState(#Pulsing)
+        Substates [
+            #Pulsing Transitions [
+                (Target(#Done) MessageEdge::<Done>::default())
+            ] Substates [
+                #Inner repeater::<Vec3>(
+                    #Root, STORM_PULSE_COUNT, STORM_PULSE_INTERVAL,
+                    configure_root_spawn(FROST_PULSE),
+                ),
+            ],
+            #Done state(DelayedDespawn::now()),
+        ]
+    }
+}
+
+/// A single cold AoE tick (like the explosion, but chilling).
+fn frost_pulse() -> impl Scene {
+    bsn! {
+        #Root
+            Name::new("FrostPulse")
+            TeamFilter::Enemies
+            Visibility::Inherited
+            template(|_| Ok(Lifetime::secs(0.3)))
+            template(|ctx| Ok(Mesh3d(ctx.resource::<ProjectileAssets>().pulse_mesh.clone())))
+            template(|ctx| Ok(MeshMaterial3d(ctx.resource::<ProjectileAssets>().pulse_material.clone())))
+            StateMachine InitialState(#Active)
+        Substates [
+            #Active GoOffConfig::default()
+            Substates [
+                #AoE SubEffectOf(#Active) InvokedBy(#Root)
+                    TargetMutator::root_gathering(AvianGatherer::AllEntitiesInRadius(STORM_RADIUS))
+                    template(|_| Ok(bevy_gauge::attributes! { "TargetMutator.gatherer" => "Area@ability" }))
+                Substates [
+                    (SubEffectOf(#AoE) InvokedBy(#Root)
+                        Name::new("Chill")
+                        HitEffect
+                        DamageEffect::cold("Damage@invoker * Damage@ability * 0.6")),
+                ],
+            ],
+        ]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Orbiting Blade — a sustained ability: the ability entity *is* the orbiter
+// ---------------------------------------------------------------------------
+
+/// A persistent blade circling the player. Its `#Active` state self-transitions
+/// on `CollidedEntity`, re-firing its damage each time it sweeps an enemy.
+pub fn orbiting_blade() -> impl Scene {
+    bsn! {
+        #Root
+            Name::new("OrbitingBlade")
+            // `Ability` so `@ability` resolves to this entity — its own `Damage`
+            // multiplier makes the blade rank-uppable like the spawned abilities.
+            Ability
+            template(|_| Ok(bevy_gauge::attributes! { "Damage" => 1.0 }))
+            Orbiter
+            TeamFilter::Enemies
+            Sensor
+            CollisionEventsEnabled
+            template(|_| Ok(RigidBody::Kinematic))
+            Collider::sphere(0.35)
+            CollisionLayers::new([Layer::Projectile], [Layer::Character])
+            Visibility::Inherited
+            template(|ctx| Ok(Mesh3d(ctx.resource::<ProjectileAssets>().blade_mesh.clone())))
+            template(|ctx| Ok(MeshMaterial3d(ctx.resource::<ProjectileAssets>().blade_material.clone())))
+            Transform::default()
+            StateMachine InitialState(#Active)
+        Substates [
+            #Active Transitions [
+                (Target(#Active) MessageEdge::<CollidedEntity>::default())
+            ] Substates [
+                (SubEffectOf(#Active) InvokedBy(#Root)
+                    Name::new("Slash")
+                    HitEffect
+                    DamageEffect::physical("Damage@invoker * Damage@ability")),
+            ],
         ]
     }
 }
@@ -318,10 +568,10 @@ impl Plugin for AbilityPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TemplateRegistry>()
             .add_systems(Startup, (setup_projectile_assets, register_projectiles))
-            .add_systems(Update, equip_abilities)
+            .add_systems(Update, (equip_abilities, tick_lifetimes))
             .add_systems(
                 Update,
-                (update_aim, auto_invoke, home_missiles)
+                (update_aim, auto_invoke, home_missiles, orbit_blades)
                     .run_if(in_state(PlayingState::Running)),
             );
     }
@@ -351,6 +601,32 @@ fn setup_projectile_assets(
             emissive: LinearRgba::new(1.0, 3.0, 5.0, 1.0),
             ..default()
         }),
+        explosion_mesh: meshes.add(Sphere::new(EXPLOSION_RADIUS)),
+        explosion_material: materials.add(StandardMaterial {
+            base_color: Color::srgba(1.0, 0.5, 0.1, 0.35),
+            emissive: LinearRgba::new(6.0, 2.0, 0.0, 1.0),
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        }),
+        pulse_mesh: meshes.add(Sphere::new(STORM_RADIUS)),
+        pulse_material: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.5, 0.85, 1.0, 0.3),
+            emissive: LinearRgba::new(1.0, 3.0, 5.0, 1.0),
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        }),
+        storm_mesh: meshes.add(Cylinder::new(STORM_RADIUS, 0.1)),
+        storm_material: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.4, 0.8, 1.0, 0.25),
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        }),
+        blade_mesh: meshes.add(Cuboid::new(0.5, 0.15, 0.15)),
+        blade_material: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.85, 0.9, 1.0),
+            emissive: LinearRgba::new(2.0, 2.0, 3.0, 1.0),
+            ..default()
+        }),
     });
 }
 
@@ -362,6 +638,10 @@ fn register_projectiles(mut registry: ResMut<TemplateRegistry>) {
     registry.register(FROST_SHARD_PROJECTILE, || {
         Box::new(frost_shard_projectile())
     });
+    registry.register(FIREBALL_PROJECTILE, || Box::new(fireball_projectile()));
+    registry.register(FIREBALL_EXPLOSION, || Box::new(fireball_explosion()));
+    registry.register(ICE_STORM_ZONE, || Box::new(ice_storm_zone()));
+    registry.register(FROST_PULSE, || Box::new(frost_pulse()));
 }
 
 /// Spawn an ability entity for every filled slot that isn't live yet. Runs when
@@ -442,5 +722,41 @@ fn auto_invoke(
     let aim = AbilityTarget::position(target.position);
     for &ability in invokes.into_iter() {
         writer.write(StartInvoke::new(ability, aim));
+    }
+}
+
+/// Circle each orbiting blade around the player on the XZ plane.
+fn orbit_blades(
+    time: Res<Time>,
+    player: Query<&GlobalTransform, With<Player>>,
+    mut blades: Query<(&mut Orbiter, &mut Transform)>,
+) {
+    let Ok(player_tf) = player.single() else {
+        return;
+    };
+    let center = player_tf.translation();
+    for (mut orbiter, mut transform) in &mut blades {
+        orbiter.angle += BLADE_ORBIT_SPEED * time.delta_secs();
+        transform.translation = center
+            + Vec3::new(
+                orbiter.angle.cos() * BLADE_ORBIT_RADIUS,
+                0.6,
+                orbiter.angle.sin() * BLADE_ORBIT_RADIUS,
+            );
+    }
+}
+
+/// Despawn entities whose lifetime has elapsed (transient AoE bursts).
+fn tick_lifetimes(
+    time: Res<Time>,
+    mut lifetimes: Query<(Entity, &mut Lifetime)>,
+    mut commands: Commands,
+) {
+    for (entity, mut lifetime) in &mut lifetimes {
+        if lifetime.0.tick(time.delta()).just_finished() {
+            if let Ok(mut ec) = commands.get_entity(entity) {
+                ec.try_despawn();
+            }
+        }
     }
 }
