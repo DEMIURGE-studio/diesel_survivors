@@ -4,7 +4,7 @@
 //! a live ability entity.
 
 use bevy::prelude::*;
-use diesel_avian3d::gauge::prelude::{AttributesMut, InstantExt};
+use diesel_avian3d::gauge::prelude::{AttributeQueries, AttributesMut, InstantExt};
 use rand::Rng;
 
 use crate::ability::{AbilityId, AbilitySlots, SlotAbility};
@@ -35,20 +35,20 @@ impl Default for Experience {
     }
 }
 
-/// A rarity tier for a rolled rank-up: rarer tiers grant a bigger damage bonus.
+/// A rarity tier for a rolled upgrade: rarer tiers grant a bigger percentage.
 #[derive(Clone, Copy)]
 struct Tier {
     label: &'static str,
-    /// Added to the ability's `1.0`-based `Damage` multiplier.
-    damage_bonus: f32,
+    /// Fraction of the stat's current value the upgrade adds/removes.
+    pct: f32,
     /// Relative roll weight.
     weight: u32,
 }
 
 const TIERS: [Tier; 3] = [
-    Tier { label: "Common", damage_bonus: 0.20, weight: 60 },
-    Tier { label: "Rare", damage_bonus: 0.35, weight: 30 },
-    Tier { label: "Legendary", damage_bonus: 0.50, weight: 10 },
+    Tier { label: "Common", pct: 0.10, weight: 60 },
+    Tier { label: "Rare", pct: 0.20, weight: 30 },
+    Tier { label: "Legendary", pct: 0.35, weight: 10 },
 ];
 
 /// Weighted roll over [`TIERS`].
@@ -64,24 +64,100 @@ fn roll_tier(rng: &mut impl Rng) -> Tier {
     TIERS[0]
 }
 
-/// One choice on the level-up screen: equip a new ability, or rank up an owned
-/// one with a pre-rolled tier (so the offered upgrade is fixed and shown).
+/// How an upgrade mutates a gauge attribute. Percentage ops scale by the stat's
+/// own current value (so they compound and never overshoot a floor); flat adds a
+/// fixed amount (for integer-ish stats like projectile count).
+#[derive(Clone, Copy)]
+enum Op {
+    /// `stat += stat * pct` — "more is better" (Damage, Area, …).
+    AddPct,
+    /// `stat -= stat * pct` — "less is better", self-flooring (CooldownMult).
+    SubPct,
+    /// `stat += amount` — fixed step (ProjectileCount).
+    AddFlat(f32),
+}
+
+/// Apply an upgrade to one attribute on `entity`. Built as an [`InstantModifierSet`]
+/// by hand (not the `instant!` macro) so the attribute name can be dynamic.
+fn apply_op(stat: &str, op: Op, pct: f32, entity: Entity, attrs: &mut AttributesMut) {
+    use diesel_avian3d::gauge::prelude::InstantModifierSet;
+    let mut inst = InstantModifierSet::new();
+    match op {
+        Op::AddPct => inst.push_add(stat, format!("{stat} * {pct}").as_str()),
+        Op::SubPct => inst.push_sub(stat, format!("{stat} * {pct}").as_str()),
+        Op::AddFlat(amount) => inst.push_add(stat, amount),
+    }
+    attrs.apply_instant(&inst, &[], entity);
+}
+
+/// A stat an ability exposes for per-ability rank-ups; offered only when the
+/// ability actually carries `stat` (e.g. only AoE abilities have `AreaBase`).
+struct AbilityStat {
+    label: &'static str,
+    stat: &'static str,
+    op: Op,
+}
+
+const ABILITY_STATS: [AbilityStat; 4] = [
+    AbilityStat { label: "Damage", stat: "Damage", op: Op::AddPct },
+    AbilityStat { label: "Cooldown", stat: "CooldownBase", op: Op::SubPct },
+    AbilityStat { label: "Area", stat: "AreaBase", op: Op::AddPct },
+    AbilityStat { label: "Speed", stat: "ProjectileSpeedBase", op: Op::AddPct },
+];
+
+/// A player-wide passive upgrade (applied to the player's global stat, so it
+/// scales every ability or the character itself at once).
+struct GlobalUpgrade {
+    label: &'static str,
+    stat: &'static str,
+    op: Op,
+}
+
+const GLOBAL_UPGRADES: [GlobalUpgrade; 9] = [
+    GlobalUpgrade { label: "Power", stat: "Damage", op: Op::AddPct },
+    GlobalUpgrade { label: "Swiftness", stat: "AttackSpeed", op: Op::AddPct },
+    GlobalUpgrade { label: "Expanse", stat: "Area", op: Op::AddPct },
+    GlobalUpgrade { label: "Velocity", stat: "ProjectileSpeed", op: Op::AddPct },
+    GlobalUpgrade { label: "Cooldown", stat: "CooldownMult", op: Op::SubPct },
+    GlobalUpgrade { label: "Multishot", stat: "ProjectileCount", op: Op::AddFlat(1.0) },
+    GlobalUpgrade { label: "Vigor", stat: "Vitality", op: Op::AddPct },
+    GlobalUpgrade { label: "Fleet", stat: "MoveSpeed", op: Op::AddPct },
+    GlobalUpgrade { label: "Magnet", stat: "PickupRadius", op: Op::AddPct },
+];
+
+/// One choice on the level-up screen. Each carries its pre-rolled tier so the
+/// offered magnitude is fixed and shown.
 #[derive(Clone, Copy)]
 enum DraftOption {
+    /// Slot a not-yet-equipped ability.
     Equip(AbilityId),
-    RankUp(AbilityId, Tier),
+    /// Buff one stat of an owned ability (instant on the spell entity).
+    AbilityUp { id: AbilityId, stat: usize, tier: Tier },
+    /// Buff a player-wide passive (instant on the player).
+    Global { kind: usize, tier: Tier },
+}
+
+/// Format `+N%` / `−N%` / `+N` for a tier and op.
+fn magnitude_label(op: Op, pct: f32) -> String {
+    match op {
+        Op::AddPct => format!("+{}%", (pct * 100.0).round() as i32),
+        Op::SubPct => format!("−{}%", (pct * 100.0).round() as i32),
+        Op::AddFlat(amount) => format!("+{}", amount as i32),
+    }
 }
 
 impl DraftOption {
     fn label(&self) -> String {
         match self {
             DraftOption::Equip(id) => format!("{} — New", id.name()),
-            DraftOption::RankUp(id, tier) => format!(
-                "{} — {} +{}% Damage",
-                id.name(),
-                tier.label,
-                (tier.damage_bonus * 100.0).round() as i32,
-            ),
+            DraftOption::AbilityUp { id, stat, tier } => {
+                let s = &ABILITY_STATS[*stat];
+                format!("{} — {} {} {}", id.name(), tier.label, magnitude_label(s.op, tier.pct), s.label)
+            }
+            DraftOption::Global { kind, tier } => {
+                let g = &GLOBAL_UPGRADES[*kind];
+                format!("{} {} — {} {}", g.label, magnitude_label(g.op, tier.pct), tier.label, "(global)")
+            }
         }
     }
 }
@@ -225,11 +301,14 @@ fn check_level_up(
     next.set(PlayingState::LevelUp);
 }
 
-/// Build the draft pool — equip options for empty slots, a freshly-rolled rank-up
-/// for each owned ability — then offer up to three distinct picks.
+/// Build the draft pool — equip options for empty slots, a freshly-rolled per-stat
+/// rank-up for each stat an owned ability carries, and a rolled global passive for
+/// each kind — then offer up to three distinct picks.
 fn open_draft(
     mut draft: ResMut<Draft>,
     player: Query<&AbilitySlots, With<Player>>,
+    q_ability: Query<(Entity, &SlotAbility)>,
+    mut attrs: AttributesMut,
     mut commands: Commands,
 ) {
     let Ok(slots) = player.single() else {
@@ -239,6 +318,8 @@ fn open_draft(
     let mut rng = rand::rng();
 
     let mut pool: Vec<DraftOption> = Vec::new();
+
+    // Equip a not-yet-owned ability (only while a slot is free).
     if !slots.is_full() {
         pool.extend(
             AbilityId::ALL
@@ -247,11 +328,25 @@ fn open_draft(
                 .map(DraftOption::Equip),
         );
     }
-    pool.extend(
-        equipped
-            .iter()
-            .map(|&id| DraftOption::RankUp(id, roll_tier(&mut rng))),
-    );
+
+    // Per-ability stat rank-ups — offer a stat only if the live spell carries it
+    // (e.g. `AreaBase` exists on AoE abilities, `ProjectileSpeedBase` on projectile
+    // abilities, the sustained blade has only `Damage`).
+    for (spell, slot) in &q_ability {
+        let Some(a) = attrs.get_attributes(spell) else {
+            continue;
+        };
+        for (idx, st) in ABILITY_STATS.iter().enumerate() {
+            if a.value(st.stat) > 0.0 {
+                pool.push(DraftOption::AbilityUp { id: slot.0, stat: idx, tier: roll_tier(&mut rng) });
+            }
+        }
+    }
+
+    // Player-wide passives — one rolled option per kind.
+    for idx in 0..GLOBAL_UPGRADES.len() {
+        pool.push(DraftOption::Global { kind: idx, tier: roll_tier(&mut rng) });
+    }
 
     // Partial Fisher–Yates: surface up to three distinct options.
     let offered = pool.len().min(3);
@@ -284,12 +379,13 @@ fn open_draft(
         });
 }
 
-/// Resolve a draft pick: equip a new ability, or apply the rolled rank-up instant
-/// to the live ability entity's `Damage` (which its effects read as
-/// `Damage@ability`). Returns once handled so the caller leaves the draft.
+/// Resolve a draft pick: equip a new ability, apply a per-ability stat instant to
+/// the live spell, or apply a global passive instant to the player. Returns once
+/// handled so the caller leaves the draft.
 fn pick_draft(
     index: usize,
     draft: &Draft,
+    player_entity: Entity,
     slots: &mut AbilitySlots,
     q_ability: &Query<(Entity, &SlotAbility)>,
     attributes: &mut AttributesMut,
@@ -302,15 +398,15 @@ fn pick_draft(
         DraftOption::Equip(id) => {
             slots.equip(id);
         }
-        DraftOption::RankUp(id, tier) => {
+        DraftOption::AbilityUp { id, stat, tier } => {
             if let Some((entity, _)) = q_ability.iter().find(|(_, slot)| slot.0 == id) {
-                let bonus = tier.damage_bonus;
-                attributes.apply_instant(
-                    &bevy_gauge::instant! { "Damage" += bonus },
-                    &[],
-                    entity,
-                );
+                let s = &ABILITY_STATS[stat];
+                apply_op(s.stat, s.op, tier.pct, entity, attributes);
             }
+        }
+        DraftOption::Global { kind, tier } => {
+            let g = &GLOBAL_UPGRADES[kind];
+            apply_op(g.stat, g.op, tier.pct, player_entity, attributes);
         }
     }
     next.set(PlayingState::Running);
@@ -319,17 +415,18 @@ fn pick_draft(
 fn draft_button_clicks(
     buttons: Query<(&Interaction, &DraftButton), (Changed<Interaction>, With<Button>)>,
     draft: Res<Draft>,
-    mut player: Query<&mut AbilitySlots, With<Player>>,
+    mut player: Query<(Entity, &mut AbilitySlots), With<Player>>,
     q_ability: Query<(Entity, &SlotAbility)>,
     mut attributes: AttributesMut,
     mut next: ResMut<NextState<PlayingState>>,
 ) {
     for (interaction, draft_button) in &buttons {
         if *interaction == Interaction::Pressed {
-            if let Ok(mut slots) = player.single_mut() {
+            if let Ok((player_entity, mut slots)) = player.single_mut() {
                 pick_draft(
                     draft_button.0,
                     &draft,
+                    player_entity,
                     &mut slots,
                     &q_ability,
                     &mut attributes,
@@ -351,7 +448,7 @@ fn close_draft(mut commands: Commands, ui: Query<Entity, With<LevelUpUi>>) {
 fn draft_input(
     keys: Res<ButtonInput<KeyCode>>,
     draft: Res<Draft>,
-    mut player: Query<&mut AbilitySlots, With<Player>>,
+    mut player: Query<(Entity, &mut AbilitySlots), With<Player>>,
     q_ability: Query<(Entity, &SlotAbility)>,
     mut attributes: AttributesMut,
     mut next: ResMut<NextState<PlayingState>>,
@@ -359,8 +456,8 @@ fn draft_input(
     const DIGITS: [KeyCode; 3] = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3];
     for (i, key) in DIGITS.iter().enumerate() {
         if keys.just_pressed(*key) {
-            if let Ok(mut slots) = player.single_mut() {
-                pick_draft(i, &draft, &mut slots, &q_ability, &mut attributes, &mut next);
+            if let Ok((player_entity, mut slots)) = player.single_mut() {
+                pick_draft(i, &draft, player_entity, &mut slots, &q_ability, &mut attributes, &mut next);
             }
         }
     }

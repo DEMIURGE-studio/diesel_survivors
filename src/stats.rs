@@ -22,7 +22,7 @@
 //! | `CooldownMult`    | ability cooldown scale (lower = faster)  |
 //! | `Area`            | AoE / projectile size scale              |
 //! | `ProjectileCount` | extra projectiles per cast               |
-//! | `ProjectileSpeed` | projectile travel speed                  |
+//! | `ProjectileSpeed` | projectile travel-speed scale (1.0 = nominal) |
 //! | `CritChance`      | 0..1 chance to crit                      |
 //! | `CritMult`        | crit damage multiplier                   |
 //! | `PickupRadius`    | XP / item attraction radius              |
@@ -73,7 +73,8 @@ pub fn core_mod_set(vitality: f32, move_speed: f32) -> ModifierSet {
         "CooldownMult" => 1.0,
         "Area" => 1.0,
         "ProjectileCount" => 1.0,
-        "ProjectileSpeed" => 12.0,
+        // 1.0 = nominal; abilities multiply their base speed by this scale.
+        "ProjectileSpeed" => 1.0,
         "CritChance" => 0.05,
         "CritMult" => 2.0,
         "PickupRadius" => 2.5,

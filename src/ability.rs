@@ -13,6 +13,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
+use diesel_avian3d::gauge::prelude::ModifierSet;
 use diesel_avian3d::prelude::*;
 use diesel_avian3d::DirectionOffset;
 
@@ -45,7 +46,6 @@ const FROST_PULSE: &str = "abilities/frost_pulse";
 const ICE_STORM_COOLDOWN: f32 = 4.0;
 const STORM_RADIUS: f32 = 3.2;
 const STORM_PULSE_COUNT: &str = "8";
-const STORM_PULSE_INTERVAL: f32 = 0.5;
 
 const BLADE_ORBIT_RADIUS: f32 = 2.2;
 const BLADE_ORBIT_SPEED: f32 = 3.5;
@@ -201,6 +201,28 @@ fn state<T: Component + Clone>(value: T) -> impl Scene {
     bsn! { template(move |_| Ok(sc.clone())) }
 }
 
+/// Per-ability base attributes. Each stat is split into a plain `*Base` (the
+/// per-ability rank-up target — a level-up applies a gauge instant to it) and a
+/// derived *effective* value that folds in the matching player global; the
+/// ability's effects (and spawned projectiles) read the derived one as
+/// `"...@ability"`, resolved against the ability root's `@invoker` (the player):
+/// `Cooldown = CooldownBase × CooldownMult`, `Area = AreaBase × Area`,
+/// `ProjectileSpeed = ProjectileSpeedBase × ProjectileSpeed`.
+fn ability_base(cooldown: f32, projectile_speed: Option<f32>, area: Option<f32>) -> ModifierSet {
+    let mut set = ModifierSet::new();
+    set.add("CooldownBase", cooldown);
+    set.add_expr("Cooldown", "CooldownBase * CooldownMult@invoker");
+    if let Some(speed) = projectile_speed {
+        set.add("ProjectileSpeedBase", speed);
+        set.add_expr("ProjectileSpeed", "ProjectileSpeedBase * ProjectileSpeed@invoker");
+    }
+    if let Some(radius) = area {
+        set.add("AreaBase", radius);
+        set.add_expr("Area", "AreaBase * Area@invoker");
+    }
+    set
+}
+
 /// Firing leaf: spawn a projectile template at the invoker (a touch above the
 /// ground, at enemy mid-height), aimed at whatever the invoker is targeting.
 fn configure_projectile_spawn(template_id: &'static str) -> impl Scene {
@@ -219,14 +241,19 @@ fn configure_projectile_spawn(template_id: &'static str) -> impl Scene {
 
 /// Ready → Invoking (a `ProjectileCount`-long volley) → Cooldown.
 pub fn magic_missile() -> impl Scene {
-    invoked::<Vec3, _, _>("Magic Missile", MAGIC_MISSILE_COOLDOWN, |root| {
-        repeater::<Vec3>(
-            root,
-            "ProjectileCount@invoker",
-            0.12,
-            configure_projectile_spawn(MAGIC_MISSILE_PROJECTILE),
-        )
-    })
+    invoked_with::<Vec3, _, _>(
+        "Magic Missile",
+        MAGIC_MISSILE_COOLDOWN,
+        ability_base(MAGIC_MISSILE_COOLDOWN, Some(MISSILE_SPEED), None),
+        |root| {
+            repeater::<Vec3>(
+                root,
+                "ProjectileCount@invoker",
+                "0.12 / AttackSpeed@invoker",
+                configure_projectile_spawn(MAGIC_MISSILE_PROJECTILE),
+            )
+        },
+    )
 }
 
 /// The projectile: Flying → Hit → Done. Flies straight (gravity off), dies on
@@ -236,6 +263,7 @@ fn magic_missile_projectile() -> impl Scene {
         #Root
             Name::new("MagicMissile")
             LinearProjectileEffect { speed: MISSILE_SPEED, horizontal: true }
+            template(|_| Ok(bevy_gauge::attributes! { "Speed" => "ProjectileSpeed@ability" }))
             Homing
             TeamFilter::Enemies
             CollisionLayers::new([Layer::Projectile], [Layer::Character])
@@ -268,14 +296,19 @@ fn magic_missile_projectile() -> impl Scene {
 
 /// Ready → Invoking (single bolt) → Cooldown.
 pub fn firebolt() -> impl Scene {
-    invoked::<Vec3, _, _>("Firebolt", FIREBOLT_COOLDOWN, |root| {
-        repeater::<Vec3>(
-            root,
-            "ProjectileCount@invoker",
-            0.12,
-            configure_projectile_spawn(FIREBOLT_PROJECTILE),
-        )
-    })
+    invoked_with::<Vec3, _, _>(
+        "Firebolt",
+        FIREBOLT_COOLDOWN,
+        ability_base(FIREBOLT_COOLDOWN, Some(FIREBOLT_SPEED), None),
+        |root| {
+            repeater::<Vec3>(
+                root,
+                "ProjectileCount@invoker",
+                "0.12 / AttackSpeed@invoker",
+                configure_projectile_spawn(FIREBOLT_PROJECTILE),
+            )
+        },
+    )
 }
 
 /// Bigger, slower homing bolt dealing fire damage scaled by the invoker's
@@ -285,6 +318,7 @@ fn firebolt_projectile() -> impl Scene {
         #Root
             Name::new("Firebolt")
             LinearProjectileEffect { speed: FIREBOLT_SPEED, horizontal: true }
+            template(|_| Ok(bevy_gauge::attributes! { "Speed" => "ProjectileSpeed@ability" }))
             Homing
             TeamFilter::Enemies
             CollisionLayers::new([Layer::Projectile], [Layer::Character])
@@ -317,14 +351,19 @@ fn firebolt_projectile() -> impl Scene {
 
 /// Ready → Invoking (single shard) → Cooldown.
 pub fn frost_shard() -> impl Scene {
-    invoked::<Vec3, _, _>("Frost Shard", FROST_SHARD_COOLDOWN, |root| {
-        repeater::<Vec3>(
-            root,
-            "ProjectileCount@invoker",
-            0.12,
-            configure_projectile_spawn(FROST_SHARD_PROJECTILE),
-        )
-    })
+    invoked_with::<Vec3, _, _>(
+        "Frost Shard",
+        FROST_SHARD_COOLDOWN,
+        ability_base(FROST_SHARD_COOLDOWN, Some(FROST_SHARD_SPEED), None),
+        |root| {
+            repeater::<Vec3>(
+                root,
+                "ProjectileCount@invoker",
+                "0.12 / AttackSpeed@invoker",
+                configure_projectile_spawn(FROST_SHARD_PROJECTILE),
+            )
+        },
+    )
 }
 
 /// Small, fast homing shard dealing cold damage.
@@ -333,6 +372,7 @@ fn frost_shard_projectile() -> impl Scene {
         #Root
             Name::new("FrostShard")
             LinearProjectileEffect { speed: FROST_SHARD_SPEED, horizontal: true }
+            template(|_| Ok(bevy_gauge::attributes! { "Speed" => "ProjectileSpeed@ability" }))
             Homing
             TeamFilter::Enemies
             CollisionLayers::new([Layer::Projectile], [Layer::Character])
@@ -377,12 +417,12 @@ pub fn fireball() -> impl Scene {
     invoked_with::<Vec3, _, _>(
         "Fireball",
         FIREBALL_COOLDOWN,
-        bevy_gauge::mod_set! { "Area" => EXPLOSION_RADIUS },
+        ability_base(FIREBALL_COOLDOWN, Some(FIREBALL_SPEED), Some(EXPLOSION_RADIUS)),
         |root| {
             repeater::<Vec3>(
                 root,
                 "ProjectileCount@invoker",
-                0.12,
+                "0.12 / AttackSpeed@invoker",
                 configure_projectile_spawn(FIREBALL_PROJECTILE),
             )
         },
@@ -396,6 +436,7 @@ fn fireball_projectile() -> impl Scene {
         #Root
             Name::new("Fireball")
             LinearProjectileEffect { speed: FIREBALL_SPEED, horizontal: true }
+            template(|_| Ok(bevy_gauge::attributes! { "Speed" => "ProjectileSpeed@ability" }))
             Homing
             TeamFilter::Enemies
             CollisionLayers::new([Layer::Projectile], [Layer::Character])
@@ -461,8 +502,15 @@ pub fn ice_storm() -> impl Scene {
     invoked_with::<Vec3, _, _>(
         "Ice Storm",
         ICE_STORM_COOLDOWN,
-        bevy_gauge::mod_set! { "Area" => STORM_RADIUS },
-        |root| repeater::<Vec3>(root, "1", 0.1, configure_zone_spawn(ICE_STORM_ZONE)),
+        ability_base(ICE_STORM_COOLDOWN, None, Some(STORM_RADIUS)),
+        |root| {
+            repeater::<Vec3>(
+                root,
+                "1",
+                "0.1 / AttackSpeed@invoker",
+                configure_zone_spawn(ICE_STORM_ZONE),
+            )
+        },
     )
 }
 
@@ -482,7 +530,7 @@ fn ice_storm_zone() -> impl Scene {
                 (Target(#Done) MessageEdge::<Done>::default())
             ] Substates [
                 #Inner repeater::<Vec3>(
-                    #Root, STORM_PULSE_COUNT, STORM_PULSE_INTERVAL,
+                    #Root, STORM_PULSE_COUNT, "0.5 / AttackSpeed@invoker",
                     configure_root_spawn(FROST_PULSE),
                 ),
             ],
