@@ -8,6 +8,7 @@
 use bevy::prelude::*;
 use bevy::scene::prelude::CommandsSceneExt;
 use diesel_avian3d::prelude::*;
+use rand::Rng;
 
 use crate::data::abilities::{
     register_projectiles, setup_projectile_assets, AbilityDef, Homing, Lifetime, Orbiter,
@@ -84,7 +85,13 @@ impl Plugin for AbilityPlugin {
             .add_systems(Update, (equip_abilities, tick_lifetimes))
             .add_systems(
                 Update,
-                (update_aim, auto_invoke, home_missiles, orbit_blades)
+                (
+                    update_aim,
+                    auto_invoke,
+                    orbit_blades,
+                    // Launch sideways first, then curve in toward the target.
+                    (launch_homing, home_missiles).chain(),
+                )
                     .run_if(in_state(PlayingState::Running)),
             );
     }
@@ -135,12 +142,30 @@ fn update_aim(
     }
 }
 
-/// Steer homing projectiles toward their target's current position (XZ plane).
+/// Fire homing projectiles out to the side on launch, so the curve back toward the
+/// target reads as homing rather than a straight shot.
+fn launch_homing(
+    mut projectiles: Query<&mut LinearProjectile, (Added<LinearProjectile>, With<Homing>)>,
+) {
+    let mut rng = rand::rng();
+    for mut proj in &mut projectiles {
+        // Rotate the to-target heading by a wide random angle on the ground plane.
+        let magnitude = rng.random_range(1.0f32..1.9); // ~57°..109°
+        let sign = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
+        let rot = Quat::from_axis_angle(Vec3::Y, magnitude * sign);
+        proj.direction = (rot * proj.direction).normalize_or_zero();
+    }
+}
+
+/// Steer homing projectiles toward their target's current position (XZ plane),
+/// turning at most `Homing::turn_rate` radians this frame so they arc in.
 fn home_missiles(
-    mut missiles: Query<(&GlobalTransform, &mut LinearProjectile, &AbilityTarget), With<Homing>>,
+    time: Res<Time>,
+    mut missiles: Query<(&GlobalTransform, &mut LinearProjectile, &AbilityTarget, &Homing)>,
     targets: Query<&GlobalTransform>,
 ) {
-    for (tf, mut proj, target) in &mut missiles {
+    let dt = time.delta_secs();
+    for (tf, mut proj, target, homing) in &mut missiles {
         let Some(target_entity) = target.entity else {
             continue;
         };
@@ -149,10 +174,24 @@ fn home_missiles(
         };
         let mut delta = target_tf.translation() - tf.translation();
         delta.y = 0.0;
-        let dir = delta.normalize_or_zero();
-        if dir != Vec3::ZERO {
-            proj.direction = dir;
+        let desired = delta.normalize_or_zero();
+        if desired == Vec3::ZERO {
+            continue;
         }
+        let current = proj.direction.normalize_or_zero();
+        if current == Vec3::ZERO {
+            proj.direction = desired;
+            continue;
+        }
+        let max_step = homing.turn_rate * dt;
+        let angle = current.angle_between(desired);
+        proj.direction = if angle <= max_step {
+            desired
+        } else {
+            let axis = current.cross(desired).normalize_or_zero();
+            let axis = if axis == Vec3::ZERO { Vec3::Y } else { axis };
+            (Quat::from_axis_angle(axis, max_step) * current).normalize_or_zero()
+        };
     }
 }
 

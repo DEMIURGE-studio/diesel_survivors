@@ -1,12 +1,13 @@
-//! Firebolt — Sentinel's starter. A slower, hard-hitting homing fire bolt whose
-//! `Damage` (for the Sentinel) scales with MaxHealth.
+//! Firebolt — Sentinel's starter. A slow, hard-hitting *straight* fire bolt (no
+//! homing — a committed skill-shot) whose `Damage` (for the Sentinel) scales with
+//! MaxHealth.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
 
-use super::{ability_base, configure_projectile_spawn, state, AbilityDef, AbilityStats, Homing, ProjectileAssets};
+use super::{ability_base, configure_projectile_spawn, state, AbilityDef, AbilityStats, ProjectileAssets};
 use crate::damage::{DamageEffect, HitEffect};
 use crate::layers::{Layer, TeamFilter};
 
@@ -49,7 +50,8 @@ fn projectile() -> impl Scene {
             Name::new("Firebolt")
             LinearProjectileEffect { speed: SPEED, horizontal: true }
             template(|_| Ok(bevy_gauge::attributes! { "Speed" => "ProjectileSpeed@ability" }))
-            Homing
+            // No `Homing`: a committed straight shot, aimed where the target was
+            // at fire time — the heavy-hitter's tradeoff vs. the homing abilities.
             TeamFilter::Enemies
             CollisionLayers::new([Layer::Projectile], [Layer::Character])
             Collider::sphere(0.35)

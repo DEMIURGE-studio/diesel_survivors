@@ -53,7 +53,7 @@ fn projectile() -> impl Scene {
             Name::new("Fireball")
             LinearProjectileEffect { speed: SPEED, horizontal: true }
             template(|_| Ok(bevy_gauge::attributes! { "Speed" => "ProjectileSpeed@ability" }))
-            Homing
+            Homing { turn_rate: 5.0 }
             TeamFilter::Enemies
             CollisionLayers::new([Layer::Projectile], [Layer::Character])
             Collider::sphere(0.3)

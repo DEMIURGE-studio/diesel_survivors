@@ -59,7 +59,7 @@ fn spawn_char_select(mut commands: Commands) {
                 p.spawn(label(character.blurb, 18.0, Color::srgb(0.65, 0.65, 0.65)));
             }
             p.spawn(label(
-                "Click, or press 1 / 2",
+                "Click, or press 1–7",
                 18.0,
                 Color::srgb(0.55, 0.55, 0.55),
             ));
@@ -76,16 +76,22 @@ fn char_select_keys(
     mut commands: Commands,
     mut next: ResMut<NextState<AppState>>,
 ) {
+    const DIGITS: [KeyCode; 7] = [
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+        KeyCode::Digit5,
+        KeyCode::Digit6,
+        KeyCode::Digit7,
+    ];
     let roster = characters::all();
-    let pick = if keys.just_pressed(KeyCode::Digit1) {
-        Some(roster[0])
-    } else if keys.just_pressed(KeyCode::Digit2) {
-        Some(roster[1])
-    } else {
-        None
-    };
-    if let Some(character) = pick {
-        begin_run(&mut commands, &mut next, character);
+    for (i, key) in DIGITS.iter().enumerate() {
+        if keys.just_pressed(*key) {
+            if let Some(character) = roster.get(i) {
+                begin_run(&mut commands, &mut next, *character);
+            }
+        }
     }
 }
 

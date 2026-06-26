@@ -15,9 +15,15 @@ use crate::data::abilities::AbilityDef;
 use crate::layers::{Layer, Team};
 use crate::meta::MetaProgress;
 use crate::player::{MoveInput, Player};
+use crate::stats::core_mod_set;
 
-pub mod arcanist;
-pub mod sentinel;
+pub mod fireball;
+pub mod firebolt;
+pub mod firestorm;
+pub mod frost_shard;
+pub mod ice_storm;
+pub mod magic_missile;
+pub mod orbiting_blade;
 
 /// A playable character as data: how it presents, which ability it starts with,
 /// and a builder for its starting stat block (baseline + its scaling rule).
@@ -31,9 +37,28 @@ pub struct Character {
     pub stats: fn() -> ModifierSet,
 }
 
-/// Every selectable character, in menu order.
-pub fn all() -> [Character; 2] {
-    [sentinel::sentinel(), arcanist::arcanist()]
+/// Every selectable character, in menu order. Currently one **test character per
+/// ability** — same neutral loadout, different starter — so each ability can be
+/// tried directly from the select screen.
+pub fn all() -> [Character; 7] {
+    [
+        magic_missile::magic_missile(),
+        firebolt::firebolt(),
+        frost_shard::frost_shard(),
+        fireball::fireball(),
+        orbiting_blade::orbiting_blade(),
+        ice_storm::ice_storm(),
+        firestorm::firestorm(),
+    ]
+}
+
+/// Generous, neutral starting stats shared by the per-ability test characters:
+/// enough vitality to survive while testing, plus a small `ProjectileCount` bump
+/// so volley abilities show their spread and homing curve.
+pub(crate) fn test_stats() -> ModifierSet {
+    let mut set = core_mod_set(12.0, 5.0);
+    set.add("ProjectileCount", 1.0);
+    set
 }
 
 /// The character chosen on the select screen, read when spawning the player.
@@ -42,7 +67,7 @@ pub struct SelectedCharacter(pub Character);
 
 impl Default for SelectedCharacter {
     fn default() -> Self {
-        Self(arcanist::arcanist())
+        Self(magic_missile::magic_missile())
     }
 }
 

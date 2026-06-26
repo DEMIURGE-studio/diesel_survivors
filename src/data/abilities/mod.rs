@@ -15,6 +15,7 @@ use diesel_avian3d::DirectionOffset;
 
 pub mod fireball;
 pub mod firebolt;
+pub mod firestorm;
 pub mod frost_shard;
 pub mod ice_storm;
 pub mod magic_missile;
@@ -52,13 +53,14 @@ impl AbilityDef {
 }
 
 /// Every ability in the game, in menu/draft order.
-pub const ALL: [&AbilityDef; 6] = [
+pub const ALL: [&AbilityDef; 7] = [
     &magic_missile::DEF,
     &firebolt::DEF,
     &frost_shard::DEF,
     &fireball::DEF,
     &orbiting_blade::DEF,
     &ice_storm::DEF,
+    &firestorm::DEF,
 ];
 
 // ---------------------------------------------------------------------------
@@ -124,9 +126,13 @@ pub(crate) fn configure_root_spawn(template_id: &'static str) -> impl Scene {
 // Runtime components authored in ability scenes (queried by `crate::ability`)
 // ---------------------------------------------------------------------------
 
-/// Marks a projectile that steers toward its target entity each frame.
+/// Marks a projectile that steers toward its target entity each frame. Projectiles
+/// launch out to the side and curve in at `turn_rate` radians/sec, so the homing
+/// is visible (and each ability gives it a distinct feel).
 #[derive(Component, Clone, Copy, Debug, Default)]
-pub struct Homing;
+pub struct Homing {
+    pub turn_rate: f32,
+}
 
 /// A blade that circles its invoker. The orbit system advances `angle`.
 #[derive(Component, Default, Clone)]
@@ -164,6 +170,8 @@ pub struct ProjectileAssets {
     pub storm_material: Handle<StandardMaterial>,
     pub blade_mesh: Handle<Mesh>,
     pub blade_material: Handle<StandardMaterial>,
+    pub meteor_mesh: Handle<Mesh>,
+    pub meteor_material: Handle<StandardMaterial>,
 }
 
 /// Build the cached projectile/AoE visual handles once at startup.
@@ -217,6 +225,13 @@ pub fn setup_projectile_assets(
             emissive: LinearRgba::new(2.0, 2.0, 3.0, 1.0),
             ..default()
         }),
+        meteor_mesh: meshes.add(Sphere::new(firestorm::METEOR_RADIUS)),
+        meteor_material: materials.add(StandardMaterial {
+            base_color: Color::srgba(1.0, 0.35, 0.05, 0.4),
+            emissive: LinearRgba::new(8.0, 2.5, 0.0, 1.0),
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        }),
     });
 }
 
@@ -228,5 +243,6 @@ pub fn register_projectiles(mut registry: ResMut<TemplateRegistry>) {
     frost_shard::register_templates(&mut registry);
     fireball::register_templates(&mut registry);
     ice_storm::register_templates(&mut registry);
+    firestorm::register_templates(&mut registry);
     // orbiting_blade spawns nothing — it *is* the persistent entity.
 }
