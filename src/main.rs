@@ -13,6 +13,7 @@ mod hud;
 mod layers;
 mod menu;
 mod meta;
+mod pickups;
 mod player;
 mod progression;
 mod stats;
@@ -53,6 +54,7 @@ fn main() {
             player::PlayerPlugin,
             enemy::EnemyPlugin,
             ability::AbilityPlugin,
+            pickups::PickupPlugin,
             game_over::GameOverPlugin,
             menu::MenuPlugin,
             progression::ProgressionPlugin,

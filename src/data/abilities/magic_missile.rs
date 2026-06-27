@@ -10,7 +10,9 @@ use super::{ability_base, configure_projectile_spawn, state, AbilityDef, Ability
 use crate::damage::{DamageEffect, HitEffect};
 use crate::layers::{Layer, TeamFilter};
 
-const PROJECTILE: &str = "abilities/magic_missile";
+/// Registered projectile template. `pub(crate)` so other abilities (e.g. Arcane
+/// Storm) can rain this exact homing bolt — the composability showcase.
+pub(crate) const PROJECTILE: &str = "abilities/magic_missile";
 const SPEED: f32 = 18.0;
 const COOLDOWN: f32 = 0.8;
 

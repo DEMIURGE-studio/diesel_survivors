@@ -3,4 +3,5 @@
 //! rather than enums, and behaviour is authored as BSN scenes.
 
 pub mod abilities;
+pub mod buffs;
 pub mod characters;

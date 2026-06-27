@@ -13,6 +13,7 @@ use diesel_avian3d::gauge::prelude::ModifierSet;
 use diesel_avian3d::prelude::*;
 use diesel_avian3d::DirectionOffset;
 
+pub mod arcane_storm;
 pub mod fireball;
 pub mod firebolt;
 pub mod firestorm;
@@ -53,7 +54,7 @@ impl AbilityDef {
 }
 
 /// Every ability in the game, in menu/draft order.
-pub const ALL: [&AbilityDef; 7] = [
+pub const ALL: [&AbilityDef; 8] = [
     &magic_missile::DEF,
     &firebolt::DEF,
     &frost_shard::DEF,
@@ -61,6 +62,7 @@ pub const ALL: [&AbilityDef; 7] = [
     &orbiting_blade::DEF,
     &ice_storm::DEF,
     &firestorm::DEF,
+    &arcane_storm::DEF,
 ];
 
 // ---------------------------------------------------------------------------
@@ -120,6 +122,36 @@ pub(crate) fn configure_zone_spawn(template_id: &'static str) -> impl Scene {
 /// Firing leaf that spawns a template at the spawner's own root position.
 pub(crate) fn configure_root_spawn(template_id: &'static str) -> impl Scene {
     bsn! { SpawnConfig::root(template_id) }
+}
+
+/// A placed "storm" zone shell: a state machine whose repeater drops `waves`
+/// waves of whatever `spawn` describes, then despawns once the volley is spent
+/// (the repeater emits `Done` → the zone transitions to a self-despawning state).
+///
+/// The per-wave payload — meteors that fall, missiles that home, motes that
+/// chill — lives *entirely* in `spawn` (a firing leaf referencing some projectile
+/// template). So once you have a projectile template, a new storm is this shell
+/// plus a one-line spawn leaf: see [`firestorm`] (meteors) and [`arcane_storm`]
+/// (reuses Magic Missile's homing bolt). The zone is invisible; placement and
+/// height come from the ability's spawn offset.
+pub(crate) fn storm_zone(
+    name: &'static str,
+    waves: &'static str,
+    wave_interval: &'static str,
+    spawn: impl Scene,
+) -> impl Scene {
+    bsn! {
+        #Root
+            Name::new(name)
+            StateMachine InitialState(#RepeaterSlot)
+            Transitions [
+                (Target(#Done) MessageEdge::<Done>::default())
+            ]
+        Substates [
+            #RepeaterSlot repeater(#Root, waves, wave_interval, spawn),
+            #Done state(DelayedDespawn::now()),
+        ]
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -244,5 +276,6 @@ pub fn register_projectiles(mut registry: ResMut<TemplateRegistry>) {
     fireball::register_templates(&mut registry);
     ice_storm::register_templates(&mut registry);
     firestorm::register_templates(&mut registry);
+    arcane_storm::register_templates(&mut registry);
     // orbiting_blade spawns nothing — it *is* the persistent entity.
 }

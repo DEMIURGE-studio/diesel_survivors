@@ -11,7 +11,7 @@ use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
 use diesel_avian3d::DirectionOffset;
 
-use super::{ability_base, state, AbilityDef, AbilityStats, Lifetime, ProjectileAssets};
+use super::{ability_base, state, storm_zone, AbilityDef, AbilityStats, Lifetime, ProjectileAssets};
 use crate::damage::{DamageEffect, HitEffect};
 use crate::layers::{Layer, TeamFilter};
 
@@ -62,32 +62,20 @@ pub(crate) fn register_templates(registry: &mut TemplateRegistry) {
     registry.register(BURST, || Box::new(burst()));
 }
 
-/// The zone (invisible, high above the target): a repeater drops `WAVES` waves of
-/// `PER_WAVE` meteors in a circle around itself, then it despawns on exhaustion.
+/// The zone (invisible, high above the target): the shared [`storm_zone`] shell,
+/// dropping `WAVES` waves of `PER_WAVE` meteors scattered in a circle around
+/// itself. Each meteor falls and bursts where it lands.
 fn zone() -> impl Scene {
-    bsn! {
-        #Root
-            Name::new("FirestormZone")
-            StateMachine InitialState(#RepeaterSlot)
-            Transitions [
-                (Target(#Done) MessageEdge::<Done>::default())
-            ]
-        Substates [
-            // The repeater merges onto this slot; on exhaustion it emits `Done`
-            // to its parent (#Root), which transitions to #Done above.
-            #RepeaterSlot repeater(
-                #Root,
-                WAVES,
-                "0.5 / AttackSpeed@invoker",
-                bsn! {
-                    template(|_| Ok(SpawnConfig::root(METEOR).with_gatherer(
-                        AvianGatherer::Circle { radius: RAIN_RADIUS, count: NumberType::Fixed(PER_WAVE) },
-                    )))
-                },
-            ),
-            #Done state(DelayedDespawn::now()),
-        ]
-    }
+    storm_zone(
+        "FirestormZone",
+        WAVES,
+        "0.5 / AttackSpeed@invoker",
+        bsn! {
+            template(|_| Ok(SpawnConfig::root(METEOR).with_gatherer(
+                AvianGatherer::Circle { radius: RAIN_RADIUS, count: NumberType::Fixed(PER_WAVE) },
+            )))
+        },
+    )
 }
 
 /// A falling explosive projectile: spawned with no target, it drops under gravity

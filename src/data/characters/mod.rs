@@ -17,6 +17,7 @@ use crate::meta::MetaProgress;
 use crate::player::{MoveInput, Player};
 use crate::stats::core_mod_set;
 
+pub mod arcane_storm;
 pub mod fireball;
 pub mod firebolt;
 pub mod firestorm;
@@ -40,7 +41,7 @@ pub struct Character {
 /// Every selectable character, in menu order. Currently one **test character per
 /// ability** — same neutral loadout, different starter — so each ability can be
 /// tried directly from the select screen.
-pub fn all() -> [Character; 7] {
+pub fn all() -> [Character; 8] {
     [
         magic_missile::magic_missile(),
         firebolt::firebolt(),
@@ -49,6 +50,7 @@ pub fn all() -> [Character; 7] {
         orbiting_blade::orbiting_blade(),
         ice_storm::ice_storm(),
         firestorm::firestorm(),
+        arcane_storm::arcane_storm(),
     ]
 }
 
