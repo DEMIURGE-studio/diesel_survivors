@@ -10,6 +10,7 @@ mod data;
 mod enemy;
 mod game_over;
 mod hud;
+mod inventory;
 mod layers;
 mod menu;
 mod meta;
@@ -60,6 +61,7 @@ fn main() {
             progression::ProgressionPlugin,
             meta::MetaPlugin,
             hud::HudPlugin,
+            inventory::InventoryPlugin,
             ui::UiPlugin,
         ))
         .insert_resource(ClearColor(Color::srgb(0.06, 0.06, 0.08)))

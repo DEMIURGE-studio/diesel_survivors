@@ -7,6 +7,7 @@
 //! whose Invoking phase runs a `repeater` volley; the spawned projectile/zone is
 //! itself a small state chart. See any module here for the pattern.
 
+use bevy::ecs::template::EntityTemplate;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::gauge::prelude::ModifierSet;
@@ -14,6 +15,7 @@ use diesel_avian3d::prelude::*;
 use diesel_avian3d::DirectionOffset;
 
 pub mod arcane_storm;
+pub mod arrow;
 pub mod fireball;
 pub mod firebolt;
 pub mod firestorm;
@@ -21,6 +23,7 @@ pub mod frost_shard;
 pub mod ice_storm;
 pub mod magic_missile;
 pub mod orbiting_blade;
+pub mod slice;
 
 // ---------------------------------------------------------------------------
 // AbilityDef — the data the rest of the game references
@@ -36,13 +39,24 @@ pub struct AbilityStats {
     pub projectile_speed: bool,
 }
 
-/// A playable ability as pure data: a stable id, a display name, a factory for a
-/// fresh BSN scene, and its rankable stats. Each lives as a `static` in its
-/// module; the game holds `&'static AbilityDef` everywhere.
+/// A playable ability as pure data. Rather than a whole scene, an ability now
+/// contributes three pieces that the item state machine assembles (see
+/// [`crate::data::items::machine::equipped_item`]):
+///
+/// - `base` — the ability's root attributes (cooldown/area/projectile-speed +
+///   `Damage` multiplier), merged with the item's `local` onto the item entity
+///   (which *is* the ability root, so `@ability`/`@item` resolve to it).
+/// - `region` — the behaviour merged onto the item's `Equipped` state: the
+///   `Ready→Invoking→Cooldown` auto-fire loop for invoked abilities, or the
+///   blade's `Active` region. Active only while equipped.
+/// - `root_extras` — extra components on the item root (persistent visuals for
+///   the blade; a no-op for invoked abilities).
 pub struct AbilityDef {
     pub id: &'static str,
     pub name: &'static str,
-    pub scene: fn() -> Box<dyn Scene>,
+    pub base: fn() -> ModifierSet,
+    pub region: fn(EntityTemplate) -> Box<dyn Scene>,
+    pub root_extras: fn() -> Box<dyn Scene>,
     pub stats: AbilityStats,
 }
 
@@ -53,17 +67,15 @@ impl AbilityDef {
     }
 }
 
-/// Every ability in the game, in menu/draft order.
-pub const ALL: [&AbilityDef; 8] = [
-    &magic_missile::DEF,
-    &firebolt::DEF,
-    &frost_shard::DEF,
-    &fireball::DEF,
-    &orbiting_blade::DEF,
-    &ice_storm::DEF,
-    &firestorm::DEF,
-    &arcane_storm::DEF,
-];
+/// Default `root_extras` for abilities with no persistent root visuals (every
+/// invoked ability). Re-asserts the item root's parked `Visibility::Hidden` — a
+/// harmless no-op that's a valid scene to merge.
+pub(crate) fn no_root_extras() -> Box<dyn Scene> {
+    Box::new(bsn! { Visibility::Hidden })
+}
+
+// Abilities are referenced through the items that grant them; see
+// [`crate::data::items`] for the equippable catalog (`items::ALL`).
 
 // ---------------------------------------------------------------------------
 // Shared scene helpers
@@ -271,6 +283,7 @@ pub fn setup_projectile_assets(
 /// runtime registry. Each module registers its own.
 pub fn register_projectiles(mut registry: ResMut<TemplateRegistry>) {
     magic_missile::register_templates(&mut registry);
+    arrow::register_templates(&mut registry);
     firebolt::register_templates(&mut registry);
     frost_shard::register_templates(&mut registry);
     fireball::register_templates(&mut registry);

@@ -23,24 +23,25 @@ const PULSE_COUNT: &str = "8";
 pub static DEF: AbilityDef = AbilityDef {
     id: "ice_storm",
     name: "Ice Storm",
-    scene,
+    base,
+    region,
+    root_extras: super::no_root_extras,
     stats: AbilityStats { cooldown: true, area: true, projectile_speed: false },
 };
 
-pub fn scene() -> Box<dyn Scene> {
-    Box::new(invoked_with(
-        "Ice Storm",
-        COOLDOWN,
-        ability_base(COOLDOWN, None, Some(STORM_RADIUS)),
-        |root| {
-            repeater(
-                root,
-                "1",
-                "0.1 / AttackSpeed@invoker",
-                configure_zone_spawn(ZONE),
-            )
-        },
-    ))
+fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+    ability_base(COOLDOWN, None, Some(STORM_RADIUS))
+}
+
+fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
+    Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| {
+        repeater(
+            root,
+            "1",
+            "0.1 / AttackSpeed@invoker",
+            configure_zone_spawn(ZONE),
+        )
+    }))
 }
 
 pub(crate) fn register_templates(registry: &mut TemplateRegistry) {

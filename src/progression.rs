@@ -1,15 +1,15 @@
-//! Leveling and the ability draft. Kills grant XP; hitting the threshold pauses
-//! into `PlayingState::LevelUp` and offers the player an unequipped ability to
-//! slot. Equipping mutates `AbilitySlots`, which the equip system reconciles into
-//! a live ability entity.
+//! Leveling and the item draft. Kills grant XP; hitting the threshold pauses
+//! into `PlayingState::LevelUp` and offers the player a new item (added to the
+//! backpack) or a stat rank-up. Acquiring mutates `Inventory`; equipping it (via
+//! the inventory panel) is what the equip system reconciles into a live ability.
 
 use bevy::prelude::*;
 use diesel_avian3d::gauge::prelude::{AttributesMut, InstantExt};
 use rand::Rng;
 
-use crate::ability::{AbilitySlots, SlotAbility};
+use crate::ability::{Inventory, SlotItem};
 use crate::attributes::{Died, PickupRadius};
-use crate::data::abilities::{AbilityDef, ALL};
+use crate::data::items::{ItemDef, ALL};
 use crate::enemy::Enemy;
 use crate::player::Player;
 use crate::states::{AppState, PlayingState};
@@ -108,12 +108,12 @@ const ABILITY_STATS: [AbilityStat; 4] = [
 
 /// Whether `def` exposes the stat at `ABILITY_STATS[idx]` for a rank-up (Damage is
 /// always rankable; the rest follow the ability's declared `stats`).
-fn ability_has_stat(def: &AbilityDef, idx: usize) -> bool {
+fn ability_has_stat(def: &ItemDef, idx: usize) -> bool {
     match idx {
         0 => true,
-        1 => def.stats.cooldown,
-        2 => def.stats.area,
-        3 => def.stats.projectile_speed,
+        1 => def.stats().cooldown,
+        2 => def.stats().area,
+        3 => def.stats().projectile_speed,
         _ => false,
     }
 }
@@ -143,9 +143,9 @@ const GLOBAL_UPGRADES: [GlobalUpgrade; 9] = [
 #[derive(Clone, Copy)]
 enum DraftOption {
     /// Slot a not-yet-equipped ability.
-    Equip(&'static AbilityDef),
+    Equip(&'static ItemDef),
     /// Buff one stat of an owned ability (instant on the spell entity).
-    AbilityUp { def: &'static AbilityDef, stat: usize, tier: Tier },
+    AbilityUp { def: &'static ItemDef, stat: usize, tier: Tier },
     /// Buff a player-wide passive (instant on the player).
     Global { kind: usize, tier: Tier },
 }
@@ -162,7 +162,7 @@ fn magnitude_label(op: Op, pct: f32) -> String {
 impl DraftOption {
     fn label(&self) -> String {
         match self {
-            DraftOption::Equip(def) => format!("{} — New", def.name),
+            DraftOption::Equip(def) => format!("{} [{}] — New", def.name, def.weapon.label()),
             DraftOption::AbilityUp { def, stat, tier } => {
                 let s = &ABILITY_STATS[*stat];
                 format!("{} — {} {} {}", def.name, tier.label, magnitude_label(s.op, tier.pct), s.label)
@@ -314,26 +314,27 @@ fn check_level_up(
     next.set(PlayingState::LevelUp);
 }
 
-/// Build the draft pool — equip options for empty slots, a freshly-rolled per-stat
-/// rank-up for each stat an owned ability carries, and a rolled global passive for
-/// each kind — then offer up to three distinct picks.
+/// Build the draft pool — new items (to the backpack) while there's room, a
+/// freshly-rolled per-stat rank-up for each stat an *equipped* ability carries,
+/// and a rolled global passive for each kind — then offer up to three distinct
+/// picks.
 fn open_draft(
     mut draft: ResMut<Draft>,
-    player: Query<&AbilitySlots, With<Player>>,
+    player: Query<&Inventory, With<Player>>,
     mut commands: Commands,
 ) {
     let Ok(slots) = player.single() else {
         return;
     };
-    let equipped: Vec<&'static AbilityDef> = slots.equipped().collect();
+    let equipped: Vec<&'static ItemDef> = slots.equipped().collect();
     let mut rng = rand::rng();
 
     let mut pool: Vec<DraftOption> = Vec::new();
 
-    // Equip a not-yet-owned ability (only while a slot is free).
-    if !slots.is_full() {
+    // Offer a not-yet-owned item (added to the backpack) while there's room.
+    if slots.backpack_has_room() {
         for def in ALL {
-            if !equipped.iter().any(|d| d.same(def)) {
+            if !slots.contains(def) {
                 pool.push(DraftOption::Equip(def));
             }
         }
@@ -386,15 +387,15 @@ fn open_draft(
         });
 }
 
-/// Resolve a draft pick: equip a new ability, apply a per-ability stat instant to
-/// the live spell, or apply a global passive instant to the player. Returns once
-/// handled so the caller leaves the draft.
+/// Resolve a draft pick: acquire a new item into the backpack, apply a per-ability
+/// stat instant to the live equipped spell, or apply a global passive instant to
+/// the player. Returns once handled so the caller leaves the draft.
 fn pick_draft(
     index: usize,
     draft: &Draft,
     player_entity: Entity,
-    slots: &mut AbilitySlots,
-    q_ability: &Query<(Entity, &SlotAbility)>,
+    slots: &mut Inventory,
+    q_ability: &Query<(Entity, &SlotItem)>,
     attributes: &mut AttributesMut,
     next: &mut NextState<PlayingState>,
 ) {
@@ -403,7 +404,7 @@ fn pick_draft(
     };
     match option {
         DraftOption::Equip(def) => {
-            slots.equip(def);
+            slots.acquire(def);
         }
         DraftOption::AbilityUp { def, stat, tier } => {
             if let Some((entity, _)) = q_ability.iter().find(|(_, slot)| slot.0.same(def)) {
@@ -422,8 +423,8 @@ fn pick_draft(
 fn draft_button_clicks(
     buttons: Query<(&Interaction, &DraftButton), (Changed<Interaction>, With<Button>)>,
     draft: Res<Draft>,
-    mut player: Query<(Entity, &mut AbilitySlots), With<Player>>,
-    q_ability: Query<(Entity, &SlotAbility)>,
+    mut player: Query<(Entity, &mut Inventory), With<Player>>,
+    q_ability: Query<(Entity, &SlotItem)>,
     mut attributes: AttributesMut,
     mut next: ResMut<NextState<PlayingState>>,
 ) {
@@ -455,8 +456,8 @@ fn close_draft(mut commands: Commands, ui: Query<Entity, With<LevelUpUi>>) {
 fn draft_input(
     keys: Res<ButtonInput<KeyCode>>,
     draft: Res<Draft>,
-    mut player: Query<(Entity, &mut AbilitySlots), With<Player>>,
-    q_ability: Query<(Entity, &SlotAbility)>,
+    mut player: Query<(Entity, &mut Inventory), With<Player>>,
+    q_ability: Query<(Entity, &SlotItem)>,
     mut attributes: AttributesMut,
     mut next: ResMut<NextState<PlayingState>>,
 ) {

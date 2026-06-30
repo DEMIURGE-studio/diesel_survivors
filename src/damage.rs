@@ -146,6 +146,9 @@ fn damage_effect_system(
         // the leaf effect entity. Falls back to the effect for non-ability sources.
         let ability = find_owning_ability(effect_entity, &q_ability, &q_invoked_by)
             .unwrap_or(effect_entity);
+        // The item *is* the ability root now (one entity), so `@item` — a weapon's
+        // own `Damage.base` — resolves to the same entity as `@ability`.
+        let item = ability;
 
         // Team gate: skip if the ability's filter rejects attacker → defender.
         if let Some(filter) = find_team_filter(effect_entity, &q_filter, &q_invoked_by) {
@@ -167,15 +170,18 @@ fn damage_effect_system(
             ("defender", defender),
             ("target", defender),
             ("ability", ability),
+            ("item", item),
         ];
         let scope_extras: Vec<(&str, f32)> =
             go_off.scope.iter().map(|&(k, v)| (k, v)).collect();
         let raw = attributes.evaluate_expr_with_roles_ctx(&expr, attacker, roles, Some(&scope_extras));
 
+        // `evaluate_tagged` registers the (Resistance, element) tag query on first
+        // use and sums the defender's matching tagged modifiers. A read-only
+        // `value_tagged` returns 0 until some other path registers that query, so
+        // resistances would silently never apply.
         let resistance = attributes
-            .get_attributes(defender)
-            .map(|a| a.value_tagged("Resistance", effect.damage_type))
-            .unwrap_or(0.0)
+            .evaluate_tagged(defender, "Resistance", effect.damage_type)
             .clamp(0.0, 1.0);
 
         let final_damage = raw * (1.0 - resistance);

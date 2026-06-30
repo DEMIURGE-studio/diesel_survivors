@@ -14,44 +14,53 @@ use crate::layers::{Layer, TeamFilter};
 pub static DEF: AbilityDef = AbilityDef {
     id: "orbiting_blade",
     name: "Orbiting Blade",
-    scene,
+    base,
+    region,
+    root_extras,
     // Sustained: no cooldown/area/projectile-speed — only `Damage` ranks up.
     stats: AbilityStats { cooldown: false, area: false, projectile_speed: false },
 };
 
-pub fn scene() -> Box<dyn Scene> {
-    Box::new(blade())
+/// No extra base attributes — the item builder seeds the `Damage` multiplier
+/// (1.0) every ability shares, which is the blade's only rank-up.
+fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+    diesel_avian3d::gauge::prelude::ModifierSet::new()
 }
 
-fn blade() -> impl Scene {
-    bsn! {
-        #Root
-            Name::new("OrbitingBlade")
-            // `Ability` so `@ability` resolves to this entity — its own `Damage`
-            // multiplier makes the blade rank-uppable like the spawned abilities.
-            Ability
-            template(|_| Ok(bevy_gauge::attributes! { "Damage" => 1.0 }))
-            Orbiter
-            TeamFilter::Enemies
-            Sensor
-            CollisionEventsEnabled
-            template(|_| Ok(RigidBody::Kinematic))
-            Collider::sphere(0.35)
-            CollisionLayers::new([Layer::Projectile], [Layer::Character])
-            Visibility::Inherited
-            template(|ctx| Ok(Mesh3d(ctx.resource::<ProjectileAssets>().blade_mesh.clone())))
-            template(|ctx| Ok(MeshMaterial3d(ctx.resource::<ProjectileAssets>().blade_material.clone())))
-            Transform::default()
-            StateMachine InitialState(#Active)
+/// The blade is a *persistent* weapon: its visuals, collider, and `Orbiter` live
+/// on the item root (the `crate::ability::orbit_blades` system moves it). They're
+/// parked (`Visibility::Hidden` + `ColliderDisabled` from the item builder) while
+/// stored, and revealed by `on_equipped` while in the `Equipped` zone.
+fn root_extras() -> Box<dyn Scene> {
+    Box::new(bsn! {
+        Orbiter
+        TeamFilter::Enemies
+        Sensor
+        CollisionEventsEnabled
+        template(|_| Ok(RigidBody::Kinematic))
+        Collider::sphere(0.35)
+        CollisionLayers::new([Layer::Projectile], [Layer::Character])
+        template(|ctx| Ok(Mesh3d(ctx.resource::<ProjectileAssets>().blade_mesh.clone())))
+        template(|ctx| Ok(MeshMaterial3d(ctx.resource::<ProjectileAssets>().blade_material.clone())))
+        Transform::default()
+    })
+}
+
+/// The blade's behaviour region, merged onto the item's `Equipped` state: a single
+/// `Active` state that self-transitions on `CollidedEntity`, re-firing its slash
+/// each sweep. Active only while equipped — benched, it neither orbits nor hits.
+fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
+    Box::new(bsn! {
+        InitialState(#Active)
         Substates [
-            #Active Transitions [
+            #Active Name::new("Active") Transitions [
                 (Target(#Active) MessageEdge::<CollidedEntity>::default())
             ] Substates [
-                (SubEffectOf(#Active) InvokedBy(#Root)
+                (SubEffectOf(#Active) InvokedBy(root)
                     Name::new("Slash")
                     HitEffect
                     DamageEffect::physical("Damage@invoker * Damage@ability")),
             ],
         ]
-    }
+    })
 }

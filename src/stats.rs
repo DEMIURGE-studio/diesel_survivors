@@ -26,12 +26,21 @@
 //! | `CritChance`      | 0..1 chance to crit                      |
 //! | `CritMult`        | crit damage multiplier                   |
 //! | `PickupRadius`    | XP / item attraction radius              |
+//! | `Resistance`      | tagged 0..1 damage reduction per element |
+//!
+//! `Resistance` is a *tagged* attribute: each modifier carries a [`DamageTags`]
+//! element mask, and the damage pipeline reads only the slice matching the hit's
+//! element (`evaluate_tagged("Resistance", FIRE)`). So one attribute holds every
+//! element's resistance at once — the gauge tag showcase. A bare `Resistance`
+//! value resists nothing until it carries a tagged modifier.
 //!
 //! Current health is *not* an attribute: it lives on the [`Health`] component,
 //! initialized from `MaxHealth` and written back so expressions can reference it.
 
 use diesel_avian3d::gauge::prelude::{AttributeInitializer, ModifierSet};
 use diesel_avian3d::prelude::*;
+
+use crate::damage::DamageTags;
 
 /// Canonical attribute names for Rust-side reads. Keep in sync with the literals
 /// in [`core_stats`].
@@ -48,21 +57,15 @@ pub mod attr {
     pub const CRIT_CHANCE: &str = "CritChance";
     pub const CRIT_MULT: &str = "CritMult";
     pub const PICKUP_RADIUS: &str = "PickupRadius";
+    pub const RESISTANCE: &str = "Resistance";
 }
 
-/// The default attribute block. Spawn alongside [`Attributes`] (the character
-/// scene supplies it). `vitality` and `move_speed` are the per-actor knobs;
-/// everything else takes a sensible baseline that abilities and items modify.
+/// The default block as a raw [`ModifierSet`], so character and enemy definitions
+/// can extend it with their own scaling before wrapping it in an initializer.
 ///
 /// `MaxHealth` is expressed in terms of `Vitality` so changing Vitality (from a
 /// level-up, an item, or a character's scaling) recomputes health automatically
 /// — the core gauge demonstration.
-pub fn core_stats(vitality: f32, move_speed: f32) -> AttributeInitializer {
-    AttributeInitializer::new(core_mod_set(vitality, move_speed))
-}
-
-/// The default block as a raw [`ModifierSet`], so character definitions can
-/// extend it with per-character scaling before wrapping it in an initializer.
 pub fn core_mod_set(vitality: f32, move_speed: f32) -> ModifierSet {
     mod_set! {
         "Vitality" => vitality,
@@ -79,4 +82,15 @@ pub fn core_mod_set(vitality: f32, move_speed: f32) -> ModifierSet {
         "CritMult" => 2.0,
         "PickupRadius" => 2.5,
     }
+}
+
+/// Enemy stat block: the core stats plus a sample **physical** resistance, so the
+/// damage-type pipeline is demonstrable in play. Physical hits (e.g. Orbiting
+/// Blade) are partly shrugged off while elemental abilities land in full — the
+/// same `Resistance` attribute, sliced by the hit's element tag. Tune or add
+/// elements (`[DamageTags::FIRE] => 0.5`) per enemy archetype later.
+pub fn enemy_stats(vitality: f32, move_speed: f32) -> AttributeInitializer {
+    let mut set = core_mod_set(vitality, move_speed);
+    set.add_tagged("Resistance", 0.30, DamageTags::PHYSICAL);
+    AttributeInitializer::new(set)
 }

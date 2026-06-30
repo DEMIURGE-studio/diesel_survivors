@@ -19,25 +19,27 @@ const COOLDOWN: f32 = 0.8;
 pub static DEF: AbilityDef = AbilityDef {
     id: "magic_missile",
     name: "Magic Missile",
-    scene,
+    base,
+    region,
+    root_extras: super::no_root_extras,
     stats: AbilityStats { cooldown: true, area: false, projectile_speed: true },
 };
 
-/// Ready → Invoking (a `ProjectileCount`-long volley) → Cooldown.
-pub fn scene() -> Box<dyn Scene> {
-    Box::new(invoked_with(
-        "Magic Missile",
-        COOLDOWN,
-        ability_base(COOLDOWN, Some(SPEED), None),
-        |root| {
-            repeater(
-                root,
-                "ProjectileCount@invoker",
-                "0.12 / AttackSpeed@invoker",
-                configure_projectile_spawn(PROJECTILE),
-            )
-        },
-    ))
+fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+    ability_base(COOLDOWN, Some(SPEED), None)
+}
+
+/// Ready → Invoking (a `ProjectileCount`-long volley) → Cooldown — the auto-fire
+/// loop merged onto the item's `Equipped` state.
+fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
+    Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| {
+        repeater(
+            root,
+            "ProjectileCount@invoker",
+            "0.12 / AttackSpeed@invoker",
+            configure_projectile_spawn(PROJECTILE),
+        )
+    }))
 }
 
 pub(crate) fn register_templates(registry: &mut TemplateRegistry) {

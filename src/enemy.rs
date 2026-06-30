@@ -9,7 +9,7 @@ use rand::Rng;
 use crate::attributes::{Died, Health, MoveSpeed};
 use crate::layers::{Layer, Team};
 use crate::player::Player;
-use crate::stats::core_stats;
+use crate::stats::enemy_stats;
 use crate::states::PlayingState;
 
 const SPAWN_INTERVAL: f32 = 1.5;
@@ -120,7 +120,7 @@ fn spawn_enemies(
         MeleeAttack::default(),
         Health::default(),
         MoveSpeed::default(),
-        core_stats(2.0, 2.5),
+        enemy_stats(2.0, 2.5),
         Mesh3d(assets.mesh.clone()),
         MeshMaterial3d(assets.material.clone()),
         Transform::from_translation(pos),

@@ -20,24 +20,25 @@ pub(crate) const EXPLOSION_RADIUS: f32 = 3.0;
 pub static DEF: AbilityDef = AbilityDef {
     id: "fireball",
     name: "Fireball",
-    scene,
+    base,
+    region,
+    root_extras: super::no_root_extras,
     stats: AbilityStats { cooldown: true, area: true, projectile_speed: true },
 };
 
-pub fn scene() -> Box<dyn Scene> {
-    Box::new(invoked_with(
-        "Fireball",
-        COOLDOWN,
-        ability_base(COOLDOWN, Some(SPEED), Some(EXPLOSION_RADIUS)),
-        |root| {
-            repeater(
-                root,
-                "ProjectileCount@invoker",
-                "0.12 / AttackSpeed@invoker",
-                configure_projectile_spawn(PROJECTILE),
-            )
-        },
-    ))
+fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+    ability_base(COOLDOWN, Some(SPEED), Some(EXPLOSION_RADIUS))
+}
+
+fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
+    Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| {
+        repeater(
+            root,
+            "ProjectileCount@invoker",
+            "0.12 / AttackSpeed@invoker",
+            configure_projectile_spawn(PROJECTILE),
+        )
+    }))
 }
 
 pub(crate) fn register_templates(registry: &mut TemplateRegistry) {

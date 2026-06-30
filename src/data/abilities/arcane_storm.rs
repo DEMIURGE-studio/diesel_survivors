@@ -31,18 +31,19 @@ const WAVES: &str = "4";
 pub static DEF: AbilityDef = AbilityDef {
     id: "arcane_storm",
     name: "Arcane Storm",
-    scene,
+    base,
+    region,
+    root_extras: super::no_root_extras,
     stats: AbilityStats { cooldown: true, area: false, projectile_speed: true },
 };
 
+fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+    ability_base(COOLDOWN, Some(SPEED), None)
+}
+
 /// A single shot that places the storm zone on the target.
-pub fn scene() -> Box<dyn Scene> {
-    Box::new(invoked_with(
-        "Arcane Storm",
-        COOLDOWN,
-        ability_base(COOLDOWN, Some(SPEED), None),
-        |root| single_shot(root, configure_zone_spawn(ZONE)),
-    ))
+fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
+    Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| single_shot(root, configure_zone_spawn(ZONE))))
 }
 
 pub(crate) fn register_templates(registry: &mut TemplateRegistry) {

@@ -5,14 +5,17 @@
 //! Auto-fire (VS-style) is just spamming `StartInvoke` at the player's abilities
 //! every frame; each ability's Cooldown state rate-limits itself.
 
+use avian3d::prelude::ColliderDisabled;
 use bevy::prelude::*;
 use bevy::scene::prelude::CommandsSceneExt;
 use diesel_avian3d::prelude::*;
 use rand::Rng;
 
 use crate::data::abilities::{
-    register_projectiles, setup_projectile_assets, AbilityDef, Homing, Lifetime, Orbiter,
+    register_projectiles, setup_projectile_assets, Homing, Lifetime, Orbiter,
 };
+use crate::data::items::machine::{equipped_item, EquipIt, Equipped, Unequip};
+use crate::data::items::ItemDef;
 use crate::enemy::Enemy;
 use crate::player::Player;
 use crate::states::PlayingState;
@@ -20,41 +23,66 @@ use crate::states::PlayingState;
 const BLADE_ORBIT_RADIUS: f32 = 2.2;
 const BLADE_ORBIT_SPEED: f32 = 3.5;
 
-/// Number of ability slots a character runs at once.
-pub const SLOT_COUNT: usize = 3;
+/// Equipment slots (the live abilities) and backpack slots (carried, inactive).
+pub const EQUIP_COUNT: usize = 3;
+pub const BACKPACK_COUNT: usize = 6;
+pub const TOTAL_SLOTS: usize = EQUIP_COUNT + BACKPACK_COUNT;
 
-// ---------------------------------------------------------------------------
-// Equipped slots
-// ---------------------------------------------------------------------------
-
-/// The player's equipped abilities. Filled left-to-right by the starter and the
-/// level-up draft; the equip system spawns one ability entity per filled slot.
+/// The player's inventory: a flat array whose first [`EQUIP_COUNT`] entries are
+/// the **equipped** items (each backed by a live ability + item entity + wearer
+/// passive) and the rest are the **backpack** (carried but inactive). The equip
+/// system reconciles only the equipped slice, so moving an item between backpack
+/// and an equip slot hot-swaps just that one ability — the inventory panel
+/// ([`crate::inventory`]) drives it by swapping slots.
 #[derive(Component, Default)]
-pub struct AbilitySlots {
-    slots: [Option<&'static AbilityDef>; SLOT_COUNT],
+pub struct Inventory {
+    slots: [Option<&'static ItemDef>; TOTAL_SLOTS],
 }
 
-impl AbilitySlots {
-    pub fn with_starter(starter: &'static AbilityDef) -> Self {
-        let mut slots = [None; SLOT_COUNT];
+impl Inventory {
+    pub fn with_starter(starter: &'static ItemDef) -> Self {
+        let mut slots = [None; TOTAL_SLOTS];
         slots[0] = Some(starter);
         Self { slots }
     }
 
-    pub fn contains(&self, def: &AbilityDef) -> bool {
+    /// Is `index` an equipment slot (vs. a backpack slot)?
+    pub fn is_equip_slot(index: usize) -> bool {
+        index < EQUIP_COUNT
+    }
+
+    pub fn get(&self, index: usize) -> Option<&'static ItemDef> {
+        self.slots.get(index).copied().flatten()
+    }
+
+    /// Held anywhere (equipped or backpack).
+    pub fn contains(&self, def: &ItemDef) -> bool {
         self.slots.iter().any(|s| s.is_some_and(|d| d.same(def)))
     }
 
-    pub fn is_full(&self) -> bool {
-        self.slots.iter().all(Option::is_some)
+    /// Held in an equipment slot (i.e. currently live).
+    pub fn is_equipped(&self, def: &ItemDef) -> bool {
+        self.slots[..EQUIP_COUNT]
+            .iter()
+            .any(|s| s.is_some_and(|d| d.same(def)))
     }
 
-    /// Equip into the first empty slot. Returns false if full or already equipped.
-    pub fn equip(&mut self, def: &'static AbilityDef) -> bool {
+    /// The equipped items, in slot order.
+    pub fn equipped(&self) -> impl Iterator<Item = &'static ItemDef> + '_ {
+        self.slots[..EQUIP_COUNT].iter().filter_map(|s| *s)
+    }
+
+    pub fn backpack_has_room(&self) -> bool {
+        self.slots[EQUIP_COUNT..].iter().any(Option::is_none)
+    }
+
+    /// Put a newly-acquired item in the first free backpack slot. Returns false
+    /// if already held or the backpack is full.
+    pub fn acquire(&mut self, def: &'static ItemDef) -> bool {
         if self.contains(def) {
             return false;
         }
-        if let Some(slot) = self.slots.iter_mut().find(|s| s.is_none()) {
+        if let Some(slot) = self.slots[EQUIP_COUNT..].iter_mut().find(|s| s.is_none()) {
             *slot = Some(def);
             true
         } else {
@@ -62,15 +90,18 @@ impl AbilitySlots {
         }
     }
 
-    pub fn equipped(&self) -> impl Iterator<Item = &'static AbilityDef> + '_ {
-        self.slots.iter().filter_map(|s| *s)
+    /// Swap the contents of two slots (the inventory panel's core move).
+    pub fn swap(&mut self, a: usize, b: usize) {
+        self.slots.swap(a, b);
     }
 }
 
-/// Tags a spawned ability entity with the ability it fulfills, so the equip system
-/// can tell which slots are already live and the draft can find an ability's entity.
+/// Tags a spawned ability entity with the item it fulfills, so the sync system
+/// can reconcile inventory ↔ live abilities and the draft can find an item's
+/// entity. One such entity exists per *owned* item (equipped or backpack), for
+/// the whole run — so per-ability rank-ups applied to it survive un/re-equip.
 #[derive(Component, Clone, Copy)]
-pub struct SlotAbility(pub &'static AbilityDef);
+pub struct SlotItem(pub &'static ItemDef);
 
 // ---------------------------------------------------------------------------
 // Plugin
@@ -81,8 +112,21 @@ pub struct AbilityPlugin;
 impl Plugin for AbilityPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TemplateRegistry>()
+            // Item-machine location-zone transitions + the `Equipped` state marker.
+            .register_transition::<EquipIt>()
+            .register_transition::<Unequip>()
+            .register_state_component::<Equipped>()
             .add_systems(Startup, (setup_projectile_assets, register_projectiles))
-            .add_systems(Update, (equip_abilities, tick_lifetimes))
+            .add_systems(
+                Update,
+                (
+                    sync_inventory,
+                    drive_equip_zones,
+                    on_equipped,
+                    on_unequipped,
+                    tick_lifetimes,
+                ),
+            )
             .add_systems(
                 Update,
                 (
@@ -97,26 +141,95 @@ impl Plugin for AbilityPlugin {
     }
 }
 
-/// Spawn an ability entity for every filled slot that isn't live yet. Runs when
-/// `AbilitySlots` changes (player spawn, level-up draft), so equipping an ability
-/// brings it online without disturbing the others' cooldowns.
-fn equip_abilities(
-    q_player: Query<(Entity, &AbilitySlots, Option<&Invokes>), (With<Player>, Changed<AbilitySlots>)>,
-    q_slot: Query<&SlotAbility>,
+/// Reconcile the owned item-machines against the player's `Inventory` whenever it
+/// changes (player spawn, draft acquire, inventory swap). One item state machine is
+/// **materialized per owned item** — equipped *or* backpack — and lives the whole
+/// run; equip/unequip only sends `EquipIt` / `Unequip` to drive its `Stored ↔
+/// Equipped` zone, never despawning it. That's what lets per-ability rank-ups
+/// (gauge instants applied to the machine by the draft) survive un/re-equip. Each
+/// machine carries `DespawnOnExit(Playing)`, so a run ending cleans it up.
+fn sync_inventory(
+    q_player: Query<(Entity, &Inventory), (With<Player>, Changed<Inventory>)>,
+    q_live: Query<(Entity, &SlotItem)>,
     mut commands: Commands,
 ) {
-    for (player, slots, invokes) in &q_player {
-        let live: Vec<&'static AbilityDef> = invokes
-            .into_iter()
-            .flat_map(|inv| inv.into_iter())
-            .filter_map(|&e| q_slot.get(e).ok().map(|s| s.0))
-            .collect();
-        for def in slots.equipped() {
-            if !live.iter().any(|d| d.same(def)) {
-                commands
-                    .spawn_scene((def.scene)())
-                    .insert((InvokedBy(player), SlotAbility(def)));
+    for (player, inv) in &q_player {
+        let live: Vec<(Entity, &'static ItemDef)> =
+            q_live.iter().map(|(e, s)| (e, s.0)).collect();
+
+        // Discard: despawn any machine whose item left the inventory entirely (no
+        // discard UI yet, but keeps the reconcile total).
+        for &(entity, def) in &live {
+            if !inv.contains(def) {
+                commands.entity(entity).try_despawn();
             }
+        }
+
+        // Materialize one machine per owned item (starts parked in `Stored`).
+        // `drive_equip_zones` then walks it into the `Equipped` zone if it's slotted.
+        for index in 0..TOTAL_SLOTS {
+            let Some(item) = inv.get(index) else {
+                continue;
+            };
+            if !live.iter().any(|(_, d)| d.same(item)) {
+                commands.spawn_scene(equipped_item(player, item));
+            }
+        }
+    }
+}
+
+/// Drive each item-machine's location zone to match its inventory slot, every
+/// frame. Idempotent and self-healing: it re-sends `EquipIt` until the machine's
+/// `Equipped` marker actually appears (so it survives the one-frame race between
+/// spawning a machine and its `Stored` state going active), and `Unequip` until
+/// the marker clears. Once the zone matches the slot, it sends nothing.
+fn drive_equip_zones(
+    q_player: Query<&Inventory, With<Player>>,
+    q_machines: Query<(Entity, &SlotItem, Has<Equipped>)>,
+    mut equip_w: MessageWriter<EquipIt>,
+    mut unequip_w: MessageWriter<Unequip>,
+) {
+    let Ok(inv) = q_player.single() else {
+        return;
+    };
+    for (entity, slot, is_equipped) in &q_machines {
+        let want_equipped = inv.is_equipped(slot.0);
+        if want_equipped && !is_equipped {
+            equip_w.write(EquipIt::new(entity));
+        } else if !want_equipped && is_equipped {
+            unequip_w.write(Unequip::new(entity));
+        }
+    }
+}
+
+/// React to the `Equipped` state-marker landing on an item-machine root (its
+/// `Equipped` zone became active): reveal it and enable its collider. For invoked
+/// abilities the root has no visuals, so this is a harmless no-op; for the blade it
+/// brings the orbiter online. (The wearer passive is applied by the zone's own
+/// sustained-modifier sub-chart.)
+fn on_equipped(q_new: Query<Entity, Added<Equipped>>, mut commands: Commands) {
+    for entity in &q_new {
+        commands
+            .entity(entity)
+            .insert(Visibility::Inherited)
+            .remove::<ColliderDisabled>();
+    }
+}
+
+/// React to the `Equipped` marker leaving (the item returned to its `Stored`
+/// zone): park the root — hidden and non-colliding — so a benched persistent
+/// ability does nothing while keeping its rank-up attributes.
+fn on_unequipped(
+    mut removed: RemovedComponents<Equipped>,
+    q_item: Query<(), With<SlotItem>>,
+    mut commands: Commands,
+) {
+    for entity in removed.read() {
+        // Skip machines that were despawned (run end) rather than parked.
+        if q_item.get(entity).is_ok() {
+            commands
+                .entity(entity)
+                .insert((Visibility::Hidden, ColliderDisabled));
         }
     }
 }
@@ -195,26 +308,34 @@ fn home_missiles(
     }
 }
 
-/// Auto-fire: try to invoke every ability the player owns each frame. Cooldown
-/// states gate the actual firing.
+/// Auto-fire: drive every item-machine's invoke loop each frame by holding
+/// `InvokeStatus::TryInvoke` (so it re-fires on each `Ready` re-entry) and writing
+/// `StartInvoke`. A `Stored` item's `Ready` state is inactive, so this no-ops for
+/// benched items — the `Equipped` zone is the firing gate. Persistent abilities
+/// (the blade) have no `Ready` state and simply ignore it.
 fn auto_invoke(
-    player: Query<(&Invokes, &InvokerTarget), With<Player>>,
+    player: Query<&InvokerTarget, With<Player>>,
+    mut machines: Query<(Entity, &mut InvokeStatus), With<SlotItem>>,
     mut writer: MessageWriter<StartInvoke>,
 ) {
-    let Ok((invokes, target)) = player.single() else {
+    let Ok(target) = player.single() else {
         return;
     };
     let aim = AbilityTarget::position(target.position);
-    for &ability in invokes.into_iter() {
-        writer.write(StartInvoke::new(ability, aim));
+    for (entity, mut status) in &mut machines {
+        if *status != InvokeStatus::TryInvoke {
+            *status = InvokeStatus::TryInvoke;
+        }
+        writer.write(StartInvoke::new(entity, aim));
     }
 }
 
-/// Circle each orbiting blade around the player on the XZ plane.
+/// Circle each *equipped* orbiting blade around the player on the XZ plane. A
+/// benched blade keeps its angle but stops moving (and is hidden / non-colliding).
 fn orbit_blades(
     time: Res<Time>,
     player: Query<&GlobalTransform, With<Player>>,
-    mut blades: Query<(&mut Orbiter, &mut Transform)>,
+    mut blades: Query<(&mut Orbiter, &mut Transform), With<Equipped>>,
 ) {
     let Ok(player_tf) = player.single() else {
         return;

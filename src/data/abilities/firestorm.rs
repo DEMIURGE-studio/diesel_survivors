@@ -34,26 +34,27 @@ const WAVES: &str = "3";
 pub static DEF: AbilityDef = AbilityDef {
     id: "firestorm",
     name: "Firestorm",
-    scene,
+    base,
+    region,
+    root_extras: super::no_root_extras,
     stats: AbilityStats { cooldown: true, area: true, projectile_speed: false },
 };
 
+fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+    ability_base(COOLDOWN, None, Some(METEOR_RADIUS))
+}
+
 /// The ability: a single shot that places the firestorm zone above the target.
-pub fn scene() -> Box<dyn Scene> {
-    Box::new(invoked_with(
-        "Firestorm",
-        COOLDOWN,
-        ability_base(COOLDOWN, None, Some(METEOR_RADIUS)),
-        |root| {
-            single_shot(
-                root,
-                bsn! {
-                    template(|_| Ok(SpawnConfig::target(ZONE)
-                        .with_offset(Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, ZONE_HEIGHT)))))
-                },
-            )
-        },
-    ))
+fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
+    Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| {
+        single_shot(
+            root,
+            bsn! {
+                template(|_| Ok(SpawnConfig::target(ZONE)
+                    .with_offset(Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, ZONE_HEIGHT)))))
+            },
+        )
+    }))
 }
 
 pub(crate) fn register_templates(registry: &mut TemplateRegistry) {

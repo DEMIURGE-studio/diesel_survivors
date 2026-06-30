@@ -9,9 +9,9 @@ use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::gauge::prelude::{AttributeInitializer, ModifierSet};
 use diesel_avian3d::prelude::*;
 
-use crate::ability::AbilitySlots;
+use crate::ability::Inventory;
 use crate::attributes::{Health, MoveSpeed, PickupRadius};
-use crate::data::abilities::AbilityDef;
+use crate::data::items::ItemDef;
 use crate::layers::{Layer, Team};
 use crate::meta::MetaProgress;
 use crate::player::{MoveInput, Player};
@@ -32,7 +32,7 @@ pub mod orbiting_blade;
 pub struct Character {
     pub name: &'static str,
     pub blurb: &'static str,
-    pub starter: &'static AbilityDef,
+    pub starter: &'static ItemDef,
     pub tint: Color,
     /// Builds the character's base modifier set (callers fold in metaprogression).
     pub stats: fn() -> ModifierSet,
@@ -95,7 +95,7 @@ pub fn player_scene(character: Character) -> impl Scene {
         CollisionLayers::new([Layer::Character], LayerMask::ALL)
         TransformInterpolation
         template(|_| Ok(RigidBody::Kinematic))
-        template(move |_| Ok(AbilitySlots::with_starter(starter)))
+        template(move |_| Ok(Inventory::with_starter(starter)))
         template(move |ctx| {
             // Character baseline + scaling, then permanent metaprogression bonuses.
             let mut set = (stats)();

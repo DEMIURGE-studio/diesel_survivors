@@ -5,3 +5,4 @@
 pub mod abilities;
 pub mod buffs;
 pub mod characters;
+pub mod items;
