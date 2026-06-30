@@ -1,6 +1,5 @@
-//! Firebolt — Sentinel's starter. A slow, hard-hitting *straight* fire bolt (no
-//! homing — a committed skill-shot) whose `Damage` (for the Sentinel) scales with
-//! MaxHealth.
+//! Firebolt: Sentinel's starter. A slow, hard-hitting *straight* fire bolt: a
+//! committed skill-shot whose `Damage` (for the Sentinel) scales with MaxHealth.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -28,7 +27,7 @@ fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, Some(SPEED), None)
 }
 
-/// Ready → Invoking (a `ProjectileCount`-long volley) → Cooldown.
+/// Ready -> Invoking (a `ProjectileCount`-long volley) -> Cooldown.
 fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
     Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| {
         repeater(
@@ -44,15 +43,15 @@ pub(crate) fn register_templates(registry: &mut TemplateRegistry) {
     registry.register(PROJECTILE, || Box::new(projectile()));
 }
 
-/// Bigger, slower homing bolt dealing fire damage.
+/// Bigger, slower straight bolt dealing fire damage.
 fn projectile() -> impl Scene {
     bsn! {
         #Root
             Name::new("Firebolt")
             LinearProjectileEffect { speed: SPEED, horizontal: true }
             template(|_| Ok(bevy_gauge::attributes! { "Speed" => "ProjectileSpeed@ability" }))
-            // No `Homing`: a committed straight shot, aimed where the target was
-            // at fire time — the heavy-hitter's tradeoff vs. the homing abilities.
+            // No `Homing`: a committed straight shot, aimed where the target is
+            // at fire time. The heavy-hitter's tradeoff.
             TeamFilter::Enemies
             CollisionLayers::new([Layer::Projectile], [Layer::Character])
             Collider::sphere(0.35)

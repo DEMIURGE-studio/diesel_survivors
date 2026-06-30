@@ -1,13 +1,11 @@
-//! Arcane Storm — the composability payoff. A zone is placed on the target; its
-//! repeater rains waves of **Magic Missile's own homing bolt** scattered around
-//! the area, each locking onto a nearby enemy. No new projectile, no new shell:
-//! it reuses [`magic_missile`]'s registered projectile template and the shared
-//! [`storm_zone`] (the same shell Firestorm uses). The only new code is the zone's
-//! spawn leaf — proof that "Firestorm + Magic Missile = a missile storm" is a few
-//! lines once the parts exist.
+//! Arcane Storm: a zone placed on the target; its repeater rains waves of **Magic
+//! Missile's own homing bolt** scattered around the area, each locking onto a
+//! nearby enemy. Reuses [`magic_missile`]'s registered projectile template and the
+//! shared [`storm_zone`] (the same shell Firestorm uses); the only new code is the
+//! zone's spawn leaf.
 //!
-//! `@ability` still resolves to *this* spell across the zone→missile spawn chain,
-//! so the bolt deals Arcane Storm's `Damage`/`ProjectileSpeed`, not Magic Missile's.
+//! `@ability` resolves to *this* spell across the zone->missile spawn chain, so the
+//! bolt deals Arcane Storm's `Damage`/`ProjectileSpeed`, not Magic Missile's.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
@@ -47,12 +45,12 @@ fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
 }
 
 pub(crate) fn register_templates(registry: &mut TemplateRegistry) {
-    // Only the zone is new — the bolt is Magic Missile's, registered by its module.
+    // Only the zone is new; the bolt is Magic Missile's, registered by its module.
     registry.register(ZONE, || Box::new(zone()));
 }
 
 /// The shared storm shell, raining Magic Missile bolts: scatter the spawn points
-/// in a circle, and hand each bolt the nearest enemy so its homing kicks in.
+/// in a circle, and hand each bolt the nearest enemy so its homing engages.
 fn zone() -> impl Scene {
     storm_zone(
         "ArcaneStormZone",

@@ -1,5 +1,5 @@
-//! Magic Missile — Arcanist's starter. A homing arcane bolt volley; the count
-//! scales with `ProjectileCount`, so the Arcanist's `+2` makes it a fan of three.
+//! Magic Missile: Arcanist's starter. Homing arcane bolt volley; count scales
+//! with `ProjectileCount`, so the Arcanist's `+2` makes it a fan of three.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -11,7 +11,7 @@ use crate::damage::{DamageEffect, HitEffect};
 use crate::layers::{Layer, TeamFilter};
 
 /// Registered projectile template. `pub(crate)` so other abilities (e.g. Arcane
-/// Storm) can rain this exact homing bolt — the composability showcase.
+/// Storm) can rain this exact homing bolt.
 pub(crate) const PROJECTILE: &str = "abilities/magic_missile";
 const SPEED: f32 = 18.0;
 const COOLDOWN: f32 = 0.8;
@@ -29,7 +29,7 @@ fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, Some(SPEED), None)
 }
 
-/// Ready → Invoking (a `ProjectileCount`-long volley) → Cooldown — the auto-fire
+/// Ready -> Invoking (a `ProjectileCount`-long volley) -> Cooldown. Auto-fire
 /// loop merged onto the item's `Equipped` state.
 fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
     Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| {
@@ -46,7 +46,7 @@ pub(crate) fn register_templates(registry: &mut TemplateRegistry) {
     registry.register(PROJECTILE, || Box::new(projectile()));
 }
 
-/// The projectile: Flying → Hit → Done. Flies straight (gravity off), dies on
+/// The projectile: Flying -> Hit -> Done. Flies straight (gravity off), dies on
 /// contact (arcane damage) or after 2s.
 fn projectile() -> impl Scene {
     bsn! {

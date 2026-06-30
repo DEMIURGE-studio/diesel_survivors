@@ -1,14 +1,14 @@
-//! The attribute schema — the spine of the gauge showcase.
+//! The attribute schema, the spine of the gauge showcase.
 //!
 //! Gauge has no global attribute registry: derived expressions like
 //! `MaxHealth = Vitality * 10 + 50` are authored *per entity* as modifiers in
 //! the spawn scene. The "schema" is therefore a shared convention living here:
 //!
-//! - [`attr`] — canonical attribute names, for Rust-side reads
-//!   (`attributes.value(e, attr::HEALTH)`). The `attributes!` macro itself needs
-//!   string *literals*, so these constants are not used inside the block.
-//! - [`core_stats`] — the default block every character/enemy composes in, so
-//!   the relationships (Vitality drives MaxHealth, etc.) are defined once.
+//! - [`attr`]: canonical attribute names, for Rust-side reads
+//!   (`attributes.value(e, attr::HEALTH)`). The `attributes!` macro needs string
+//!   *literals*, so these constants are not used inside the block.
+//! - [`core_stats`]: the default block every character/enemy composes in, so the
+//!   relationships (Vitality drives MaxHealth, etc.) are defined once.
 //!
 //! ## Schema
 //!
@@ -30,11 +30,11 @@
 //!
 //! `Resistance` is a *tagged* attribute: each modifier carries a [`DamageTags`]
 //! element mask, and the damage pipeline reads only the slice matching the hit's
-//! element (`evaluate_tagged("Resistance", FIRE)`). So one attribute holds every
-//! element's resistance at once — the gauge tag showcase. A bare `Resistance`
+//! element (`evaluate_tagged("Resistance", FIRE)`). One attribute holds every
+//! element's resistance at once, the gauge tag showcase. A bare `Resistance`
 //! value resists nothing until it carries a tagged modifier.
 //!
-//! Current health is *not* an attribute: it lives on the [`Health`] component,
+//! Current health lives on the [`Health`] component (not an attribute),
 //! initialized from `MaxHealth` and written back so expressions can reference it.
 
 use diesel_avian3d::gauge::prelude::{AttributeInitializer, ModifierSet};
@@ -64,8 +64,8 @@ pub mod attr {
 /// can extend it with their own scaling before wrapping it in an initializer.
 ///
 /// `MaxHealth` is expressed in terms of `Vitality` so changing Vitality (from a
-/// level-up, an item, or a character's scaling) recomputes health automatically
-/// — the core gauge demonstration.
+/// level-up, an item, or a character's scaling) recomputes health automatically:
+/// the core gauge demonstration.
 pub fn core_mod_set(vitality: f32, move_speed: f32) -> ModifierSet {
     mod_set! {
         "Vitality" => vitality,
@@ -86,7 +86,7 @@ pub fn core_mod_set(vitality: f32, move_speed: f32) -> ModifierSet {
 
 /// Enemy stat block: the core stats plus a sample **physical** resistance, so the
 /// damage-type pipeline is demonstrable in play. Physical hits (e.g. Orbiting
-/// Blade) are partly shrugged off while elemental abilities land in full — the
+/// Blade) are partly shrugged off while elemental abilities land in full: the
 /// same `Resistance` attribute, sliced by the hit's element tag. Tune or add
 /// elements (`[DamageTags::FIRE] => 0.5`) per enemy archetype later.
 pub fn enemy_stats(vitality: f32, move_speed: f32) -> AttributeInitializer {

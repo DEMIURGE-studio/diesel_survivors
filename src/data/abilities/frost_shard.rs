@@ -1,4 +1,4 @@
-//! Frost Shard — a fast, low-cooldown cold projectile.
+//! Frost Shard: a fast, low-cooldown cold projectile.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -26,7 +26,7 @@ fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, Some(SPEED), None)
 }
 
-/// Ready → Invoking (a `ProjectileCount`-long volley) → Cooldown.
+/// Ready -> Invoking (a `ProjectileCount`-long volley) -> Cooldown.
 fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
     Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| {
         repeater(

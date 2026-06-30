@@ -1,5 +1,5 @@
-//! The play field: a static ground plane and lighting. Kept deliberately bare —
-//! the arena is a stage for the gameplay systems, not a feature itself.
+//! The play field: a static ground plane and lighting. A bare stage for the
+//! gameplay systems.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;

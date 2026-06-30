@@ -4,8 +4,7 @@
 //! Interaction is two-click swap: click a slot to pick it up, then click another
 //! to swap their contents. Moving an item between the backpack and an equipment
 //! slot mutates [`Inventory`], which the equip system reconciles into a live
-//! ability hot-swap (see [`crate::ability`]) — the player-facing face of the
-//! diesel/gauge equip/unequip showcase. Backpack-only swaps just reorder.
+//! ability hot-swap (see [`crate::ability`]). Backpack-only swaps reorder.
 
 use bevy::prelude::*;
 
@@ -114,7 +113,7 @@ fn slot(index: usize) -> impl Bundle {
             ..default()
         },
         BackgroundColor(EMPTY),
-        Text::new("—"),
+        Text::new("-"),
         TextFont {
             font_size: FontSize::Px(13.0),
             ..default()
@@ -139,13 +138,13 @@ fn slot_clicks(
             continue;
         }
         match selection.0 {
-            // Nothing held yet — pick up this slot (only if it has an item).
+            // Nothing held yet: pick up this slot if it has an item.
             None => {
                 if inv.get(slot.0).is_some() {
                     selection.0 = Some(slot.0);
                 }
             }
-            // Holding a slot — drop onto this one (swap), or cancel if it's the
+            // Holding a slot: drop onto this one (swap), or cancel if it's the
             // same slot.
             Some(src) => {
                 if src != slot.0 {
@@ -172,7 +171,7 @@ fn refresh_slots(
         let item = inv.get(slot.0);
         *text = Text::new(match item {
             Some(def) => format!("{} [{}]", def.name, def.weapon.label()),
-            None => "—".to_string(),
+            None => "-".to_string(),
         });
         *bg = if selection.0 == Some(slot.0) {
             SELECTED.into()

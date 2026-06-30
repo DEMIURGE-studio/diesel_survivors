@@ -1,11 +1,11 @@
-//! Damage typing and the hit→damage pipeline.
+//! Damage typing and the hit-to-damage pipeline.
 //!
 //! Tags let gauge modifiers filter by element: a "+10 fire damage" modifier
 //! matches fireballs but not frost novae.
 //!
 //! The pipeline is diesel-native: an ability's firing state has `DamageEffect`
 //! sub-effects (`SubEffectOf`). When the state activates, diesel fires a `GoOff`
-//! per sub-effect carrying the defender as its target; [`damage_effect_system`]
+//! per sub-effect carrying the defender as its target. [`damage_effect_system`]
 //! reads those, evaluates the damage expression against the attacker/defender
 //! attribute graphs, and subtracts from the defender's [`Health`] component.
 
@@ -27,7 +27,7 @@ define_tags! {
     },
 }
 
-/// A sub-effect that deals damage when its parent state fires. The ability only
+/// A sub-effect that deals damage when its parent state fires. The ability
 /// declares a raw-damage expression and an element; resistance and health
 /// subtraction are the pipeline's job.
 #[derive(Component, Clone, Debug, Default)]
@@ -102,7 +102,7 @@ fn find_team_filter<'a>(
 
 /// Walk the `InvokedBy` chain from an effect to the owning ability (first
 /// `Ability`). The chain is preserved across spawns, so this resolves to the
-/// top-level spell — the entity whose `Damage` multiplier `@ability` should read.
+/// top-level spell: the entity whose `Damage` multiplier `@ability` should read.
 fn find_owning_ability(
     start: Entity,
     q_ability: &Query<(), With<Ability>>,
@@ -142,15 +142,15 @@ fn damage_effect_system(
             continue;
         };
         let attacker = q_invoked_by.root_ancestor(effect_entity);
-        // `@ability` = the owning spell (its per-ability `Damage` multiplier), not
-        // the leaf effect entity. Falls back to the effect for non-ability sources.
+        // `@ability` = the owning spell (its per-ability `Damage` multiplier).
+        // Falls back to the effect for non-ability sources.
         let ability = find_owning_ability(effect_entity, &q_ability, &q_invoked_by)
             .unwrap_or(effect_entity);
-        // The item *is* the ability root now (one entity), so `@item` — a weapon's
-        // own `Damage.base` — resolves to the same entity as `@ability`.
+        // The item *is* the ability root (one entity), so `@item` (a weapon's own
+        // `Damage.base`) resolves to the same entity as `@ability`.
         let item = ability;
 
-        // Team gate: skip if the ability's filter rejects attacker → defender.
+        // Team gate: skip if the ability's filter rejects attacker -> defender.
         if let Some(filter) = find_team_filter(effect_entity, &q_filter, &q_invoked_by) {
             let invoker_team = q_team.get(attacker).ok();
             let target_team = q_team.get(defender).ok();
@@ -178,8 +178,8 @@ fn damage_effect_system(
 
         // `evaluate_tagged` registers the (Resistance, element) tag query on first
         // use and sums the defender's matching tagged modifiers. A read-only
-        // `value_tagged` returns 0 until some other path registers that query, so
-        // resistances would silently never apply.
+        // `value_tagged` returns 0 until some other path registers that query,
+        // making resistances silently never apply.
         let resistance = attributes
             .evaluate_tagged(defender, "Resistance", effect.damage_type)
             .clamp(0.0, 1.0);

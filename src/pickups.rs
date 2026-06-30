@@ -1,11 +1,11 @@
 //! Pickups: orbs dropped by dying enemies that drift to the player and apply an
 //! effect on contact.
 //!
-//! Two kinds today, both showcasing a different "common game thing":
-//! - **Health orb** — a *consumable*: instantly restores health on contact.
-//! - **Buff orb** — attaches a *timed buff* (see [`crate::data::buffs`]), a diesel
-//!   sustained-modifier scene that boosts a stat for a few seconds then cleanly
-//!   removes itself.
+//! Two kinds:
+//! - **Health orb**: a *consumable*. Instantly restores health on contact.
+//! - **Buff orb**: attaches a *timed buff* (see [`crate::data::buffs`]), a diesel
+//!   sustained-modifier scene that boosts a stat for a few seconds then removes
+//!   itself.
 //!
 //! Collection reuses the player's `PickupRadius` attribute: orbs within it home
 //! in, and on contact apply and despawn.

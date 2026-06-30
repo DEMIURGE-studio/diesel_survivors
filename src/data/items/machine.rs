@@ -1,9 +1,9 @@
-//! The item **state machine**: every owned item is one persistent gearbox machine
-//! with a `Stored` ↔ `Equipped` location zone. Entering the `Equipped` zone is
-//! what starts the ability's auto-fire loop and applies its wearer passive;
-//! leaving it parks everything. The machine (and its rank-up instants) lives for
-//! the whole run — equip/unequip never despawns it — so upgrades persist across
-//! swaps. Modelled on the `survivors` location-zone pattern.
+//! The item state machine: every owned item is one persistent gearbox machine
+//! with a `Stored` <-> `Equipped` location zone. Entering the `Equipped` zone
+//! starts the ability's auto-fire loop and applies its wearer passive; leaving it
+//! parks everything. The machine (and its rank-up instants) lives for the whole
+//! run, since equip/unequip never despawns it, so upgrades persist across swaps.
+//! Modelled on the `survivors` location-zone pattern.
 //!
 //! ```text
 //! Item (StateMachine, Ability, attrs = ability base + item local)
@@ -13,11 +13,11 @@
 //!         └── <ability region>   e.g. Ready→Invoking→Cooldown (auto-fire loop)
 //! ```
 //!
-//! The auto-fire loop is the diesel gearbox loop: while `Equipped` is active the
-//! ability cycles `Ready→Invoking→Cooldown→Ready`, re-firing on each `Ready`
-//! re-entry (driven by `InvokeStatus::TryInvoke` from [`crate::ability`]). A
-//! `Stored` item's `Ready` state is inactive, so `StartInvoke` simply no-ops —
-//! the state machine is the firing gate.
+//! The auto-fire loop is pure data: while `Equipped` is active the ability cycles
+//! `Ready->Invoking->Cooldown->Ready` on its own. `Ready->Invoking` is an
+//! `AlwaysEdge`, so the machine self-drives with no external trigger; the
+//! `Equipped` location-zone is the firing gate. A `Stored` item's region is
+//! inactive, so it doesn't tick.
 
 use avian3d::prelude::ColliderDisabled;
 use bevy::ecs::template::EntityTemplate;
@@ -37,12 +37,12 @@ use super::{Item, ItemDef};
 // Location-zone transition messages
 // ---------------------------------------------------------------------------
 
-/// Drive an item's machine `Stored → Equipped`.
+/// Drive an item's machine `Stored -> Equipped`.
 #[derive(Message, Clone, Debug, Reflect)]
 pub struct EquipIt {
     pub item: Entity,
 }
-/// Drive an item's machine `Equipped → Stored`.
+/// Drive an item's machine `Equipped -> Stored`.
 #[derive(Message, Clone, Debug, Reflect)]
 pub struct Unequip {
     pub item: Entity,
@@ -76,8 +76,8 @@ impl GearboxMessage for Unequip {
 // Equipped marker (driven by the `Equipped` state via `StateComponent`)
 // ---------------------------------------------------------------------------
 
-/// Placed on the item-machine **root** while its `Equipped` state is active (via
-/// `state(Equipped)` → `StateComponent`). Systems gate on it: the orbiting blade
+/// Placed on the item-machine root while its `Equipped` state is active (via
+/// `state(Equipped)` -> `StateComponent`). Systems gate on it: the orbiting blade
 /// only orbits / collides / shows `With<Equipped>` (see [`crate::ability`]).
 #[derive(Component, Clone, Copy, Default)]
 pub struct Equipped;
@@ -87,9 +87,10 @@ pub struct Equipped;
 // ---------------------------------------------------------------------------
 
 /// The standard invoked auto-fire region, merged onto the `Equipped` state:
-/// `Ready → Invoking → Cooldown → Ready`. Port of diesel's `invoked_with` minus
-/// the outer machine — here the *item* is the `Ability` machine root, and this is
-/// just the loop that runs while `Equipped` is the active state.
+/// `Ready -> Invoking -> Cooldown -> Ready`. Like diesel's `invoked_with` without
+/// the outer machine: here the item is the `Ability` machine root. The loop is
+/// self-driving (`Ready -> Invoking` is an `AlwaysEdge`): it cycles continuously
+/// while `Equipped` is active and freezes when the item returns to `Stored`.
 pub fn invoked_region<F, S>(
     root: EntityTemplate,
     cooldown_secs: f32,
@@ -103,7 +104,9 @@ where
         InitialState(#Ready)
         Substates [
             #Ready Name::new("Ready") Transitions [
-                (Target(#Invoking) MessageEdge::<StartInvoke>::default())
+                // Auto-advance: the loop self-drives while `Equipped` is active,
+                // no external trigger. The `Equipped` zone is the firing gate.
+                (Target(#Invoking) AlwaysEdge)
             ],
             #Invoking Name::new("Invoking") InitialState(#Inner) Transitions [
                 (Target(#Cooldown) MessageEdge::<Done>::default())
@@ -125,7 +128,7 @@ where
 ///
 /// The item entity is the `Ability` machine root carrying the merged attributes
 /// (the ability's `base` + the item's `local`, read as `@ability`/`@item`). Its
-/// one region is the `Stored ↔ Equipped` zone; the `Equipped` state hosts the
+/// one region is the `Stored <-> Equipped` zone; the `Equipped` state hosts the
 /// ability's auto-fire region and applies the wearer passive as a sustained
 /// modifier on the player. Persistent-visual abilities (the blade) contribute
 /// root components via `root_extras`.
@@ -133,7 +136,7 @@ pub fn equipped_item(player: Entity, def: &'static ItemDef) -> impl Scene {
     let ability = def.ability;
 
     // Merge the ability's base attributes with the item's local attributes, and
-    // default the `Damage` multiplier to 1.0 (as diesel's `invoked_with` does).
+    // default the `Damage` multiplier to 1.0 (like diesel's `invoked_with`).
     let mut attrs = (ability.base)();
     let local = (def.local)();
     for entry in local.entries() {
@@ -165,7 +168,7 @@ pub fn equipped_item(player: Entity, def: &'static ItemDef) -> impl Scene {
     }
 }
 
-/// The `Stored ↔ Equipped` location zone (a sequential region under the item
+/// The `Stored <-> Equipped` location zone (a sequential region under the item
 /// root). The ability's auto-fire region is merged onto `Equipped`; the wearer
 /// passive is a sustained modifier that applies while `Equipped` is active.
 fn equip_zone(root: EntityTemplate, def: &'static ItemDef) -> impl Scene {

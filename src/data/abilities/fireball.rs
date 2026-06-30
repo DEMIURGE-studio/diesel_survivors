@@ -1,4 +1,4 @@
-//! Fireball — a slow projectile that bursts into an AoE explosion on impact. The
+//! Fireball: a slow projectile that bursts into an AoE explosion on impact. The
 //! projectile deals no direct damage; the explosion gathers everything in radius.
 
 use avian3d::prelude::*;
@@ -14,7 +14,7 @@ const PROJECTILE: &str = "abilities/fireball_projectile";
 const EXPLOSION: &str = "abilities/fireball_explosion";
 const SPEED: f32 = 12.0;
 const COOLDOWN: f32 = 1.3;
-/// Base explosion radius (also the explosion mesh size — see `ProjectileAssets`).
+/// Base explosion radius (also the explosion mesh size, see `ProjectileAssets`).
 pub(crate) const EXPLOSION_RADIUS: f32 = 3.0;
 
 pub static DEF: AbilityDef = AbilityDef {
@@ -47,7 +47,7 @@ pub(crate) fn register_templates(registry: &mut TemplateRegistry) {
 }
 
 /// Slow fire projectile; on hit it spawns an explosion at the impact point and
-/// deals no direct damage (the explosion does the work).
+/// deals no direct damage.
 fn projectile() -> impl Scene {
     bsn! {
         #Root
@@ -80,7 +80,7 @@ fn projectile() -> impl Scene {
 }
 
 /// One-shot AoE: on entry, gathers every entity in radius and burns it, then
-/// fades out after a short lifetime.
+/// fades after a short lifetime.
 fn explosion() -> impl Scene {
     bsn! {
         #Root
@@ -97,8 +97,8 @@ fn explosion() -> impl Scene {
                 #AoE SubEffectOf(#Active) InvokedBy(#Root)
                     TargetMutator::root_gathering(AvianGatherer::AllEntitiesInRadius(EXPLOSION_RADIUS))
                     // Gauge-drive the gather radius: the gatherer's single field
-                    // resolves against `"TargetMutator.gatherer"`, aliased here to
-                    // the spell's `Area` so an upgrade scales every explosion.
+                    // resolves against `"TargetMutator.gatherer"`, aliased to the
+                    // spell's `Area` so an upgrade scales every explosion.
                     template(|_| Ok(bevy_gauge::attributes! { "TargetMutator.gatherer" => "Area@ability" }))
                 Substates [
                     (SubEffectOf(#AoE) InvokedBy(#Root)

@@ -1,13 +1,12 @@
-//! The player: a fresh kinematic, interpolation-smoothed top-down controller. The
-//! entity itself is authored as a per-character BSN scene (see
+//! The player: a kinematic, interpolation-smoothed top-down controller. The
+//! entity is authored as a per-character BSN scene (see
 //! [`crate::data::characters::player_scene`]); this module owns the marker, the
 //! input/movement systems, and the camera.
 //!
-//! Movement is integer-simple: sample WASD each frame into [`MoveInput`], then
-//! in `FixedUpdate` set the kinematic body's `LinearVelocity` to
-//! `direction * MoveSpeed`. Avian's transform interpolation smooths the
-//! fixed-step motion across render frames, so the character glides regardless of
-//! the physics tick rate.
+//! Movement samples WASD each frame into [`MoveInput`], then in `FixedUpdate`
+//! sets the kinematic body's `LinearVelocity` to `direction * MoveSpeed`. Avian's
+//! transform interpolation smooths the fixed-step motion across render frames, so
+//! the character glides regardless of the physics tick rate.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -26,7 +25,7 @@ pub struct Player;
 pub struct MoveInput(pub Vec3);
 
 /// Camera placement relative to the player: 24 units up, pulled back along +Z by
-/// `24 * tan(20°)` so the view tilts ~20° off straight-down.
+/// `24 * tan(20 deg)` so the view tilts ~20 deg off straight-down.
 pub const CAMERA_OFFSET: Vec3 = Vec3::new(0.0, 24.0, 8.74);
 
 pub struct PlayerPlugin;
@@ -34,7 +33,7 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         // Player lives for the duration of a Playing session; respawned each
-        // time we (re-)enter Playing (e.g. after a game-over restart).
+        // time Playing is (re-)entered (e.g. after a game-over restart).
         app.add_systems(OnEnter(AppState::Playing), spawn_player)
             .add_systems(Update, read_move_input)
             .add_systems(FixedUpdate, apply_movement)
@@ -85,7 +84,7 @@ fn camera_follow(
     let target = player.translation();
     for mut cam in &mut camera {
         // Keep the rotation set at spawn; translating by a constant offset
-        // preserves the 20° tilt relative to the followed point.
+        // preserves the 20 deg tilt relative to the followed point.
         cam.translation = target + CAMERA_OFFSET;
     }
 }

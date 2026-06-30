@@ -14,7 +14,7 @@ pub enum AppState {
 }
 
 /// Sub-state of [`AppState::Playing`]. Gameplay systems run only in `Running`;
-/// `Paused` and `LevelUp` freeze the simulation while UI is shown.
+/// `Paused` and `LevelUp` freeze the simulation while UI shows.
 #[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[source(AppState = AppState::Playing)]
 pub enum PlayingState {

@@ -1,5 +1,5 @@
-//! Front-end flow: MainMenu → CharSelect → Playing. Clickable buttons, with the
-//! original keys (Enter / 1 / 2 / U) kept as shortcuts.
+//! Front-end flow: MainMenu -> CharSelect -> Playing. Clickable buttons, with
+//! key shortcuts (Enter / 1 / 2 / U).
 
 use bevy::prelude::*;
 
@@ -34,7 +34,7 @@ fn spawn_main_menu(mut commands: Commands) {
         p.spawn(button("Play", GotoState(AppState::CharSelect)));
         p.spawn(button("Upgrades", GotoState(AppState::Upgrades)));
         p.spawn(label(
-            "Enter to play  •  U for upgrades",
+            "Enter to play  |  U for upgrades",
             18.0,
             Color::srgb(0.55, 0.55, 0.55),
         ));
@@ -59,7 +59,7 @@ fn spawn_char_select(mut commands: Commands) {
                 p.spawn(label(character.blurb, 18.0, Color::srgb(0.65, 0.65, 0.65)));
             }
             p.spawn(label(
-                "Click, or press 1–8",
+                "Click, or press 1-8",
                 18.0,
                 Color::srgb(0.55, 0.55, 0.55),
             ));

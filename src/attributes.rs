@@ -1,6 +1,6 @@
 //! Component mirrors of gauge attributes. The `AttributeComponent` derive keeps
-//! these struct fields in sync with the attribute graph automatically — reads
-//! pull from the graph, writes push back so expressions elsewhere can use them.
+//! these struct fields in sync with the attribute graph: reads pull from the
+//! graph, writes push back so expressions elsewhere can use them.
 
 use bevy::prelude::*;
 use diesel_avian3d::gauge::prelude::AttributeComponent;

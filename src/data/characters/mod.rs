@@ -1,7 +1,7 @@
-//! Playable characters as pure data. A `Character` is a small `Copy` descriptor —
-//! name, blurb, starter ability, tint, and a stat-block builder — with no enum;
-//! each variant lives in its own module. `player_scene` turns the chosen character
-//! into the BSN scene that spawns the player entity (stats + visuals + starter).
+//! Playable characters as pure data. A `Character` is a small `Copy` descriptor
+//! (name, blurb, starter ability, tint, stat-block builder); each variant lives in
+//! its own module. `player_scene` builds the BSN scene that spawns the player
+//! entity (stats, visuals, starter) for the chosen character.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -38,9 +38,9 @@ pub struct Character {
     pub stats: fn() -> ModifierSet,
 }
 
-/// Every selectable character, in menu order. Currently one **test character per
-/// ability** — same neutral loadout, different starter — so each ability can be
-/// tried directly from the select screen.
+/// Every selectable character, in menu order. One **test character per ability**:
+/// same neutral loadout, different starter, so each ability can be tried directly
+/// from the select screen.
 pub fn all() -> [Character; 8] {
     [
         magic_missile::magic_missile(),
@@ -73,9 +73,9 @@ impl Default for SelectedCharacter {
     }
 }
 
-/// The BSN scene that spawns the player for `character`: shared controller +
-/// physics infra, plus the character-specific stat block (with metaprogression
-/// folded in at spawn), starter ability slot, and tinted capsule.
+/// The BSN scene that spawns the player for `character`: shared controller and
+/// physics infra, the character-specific stat block (metaprogression folded in at
+/// spawn), starter ability slot, and tinted capsule.
 pub fn player_scene(character: Character) -> impl Scene {
     let stats = character.stats;
     let starter = character.starter;

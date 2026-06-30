@@ -1,6 +1,6 @@
-//! Ice Storm — a placed zone that pulses cold AoE for a few seconds. The ability
+//! Ice Storm: a placed zone that pulses cold AoE for a few seconds. The ability
 //! spawns the zone; the zone's repeater spawns a frost pulse each tick (a depth-2
-//! spawn — `@ability` still resolves to this spell).
+//! spawn, `@ability` still resolves to this spell).
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
@@ -16,7 +16,7 @@ use crate::layers::TeamFilter;
 const ZONE: &str = "abilities/ice_storm_zone";
 const PULSE: &str = "abilities/frost_pulse";
 const COOLDOWN: f32 = 4.0;
-/// Base pulse radius (also the zone/pulse mesh size — see `ProjectileAssets`).
+/// Base pulse radius (also the zone/pulse mesh size, see `ProjectileAssets`).
 pub(crate) const STORM_RADIUS: f32 = 3.2;
 const PULSE_COUNT: &str = "8";
 
@@ -74,7 +74,7 @@ fn zone() -> impl Scene {
     }
 }
 
-/// A single cold AoE tick (like the explosion, but chilling).
+/// A single cold AoE tick.
 fn pulse() -> impl Scene {
     bsn! {
         #Root

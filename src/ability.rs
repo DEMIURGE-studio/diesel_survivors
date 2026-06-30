@@ -1,9 +1,11 @@
 //! Ability runtime: equipped slots, the systems that drive abilities each frame,
-//! and the plugin. The abilities themselves are pure data — see
-//! [`crate::data::abilities`] — referenced here as `&'static AbilityDef`.
+//! and the plugin. Abilities are pure data ([`crate::data::abilities`]),
+//! referenced here as `&'static AbilityDef`.
 //!
-//! Auto-fire (VS-style) is just spamming `StartInvoke` at the player's abilities
-//! every frame; each ability's Cooldown state rate-limits itself.
+//! Auto-fire is data-driven: each equipped item's state machine self-loops
+//! `Ready->Invoking->Cooldown` via an `AlwaysEdge` off `Ready`, gated by its
+//! `Equipped` zone (see [`crate::data::items::machine`]). This module maintains
+//! aim ([`update_aim`]) and the per-frame behaviour systems.
 
 use avian3d::prelude::ColliderDisabled;
 use bevy::prelude::*;
@@ -30,9 +32,9 @@ pub const TOTAL_SLOTS: usize = EQUIP_COUNT + BACKPACK_COUNT;
 
 /// The player's inventory: a flat array whose first [`EQUIP_COUNT`] entries are
 /// the **equipped** items (each backed by a live ability + item entity + wearer
-/// passive) and the rest are the **backpack** (carried but inactive). The equip
+/// passive) and the rest are the **backpack** (carried, inactive). The equip
 /// system reconciles only the equipped slice, so moving an item between backpack
-/// and an equip slot hot-swaps just that one ability — the inventory panel
+/// and an equip slot hot-swaps that one ability. The inventory panel
 /// ([`crate::inventory`]) drives it by swapping slots.
 #[derive(Component, Default)]
 pub struct Inventory {
@@ -46,7 +48,7 @@ impl Inventory {
         Self { slots }
     }
 
-    /// Is `index` an equipment slot (vs. a backpack slot)?
+    /// Is `index` an equipment slot?
     pub fn is_equip_slot(index: usize) -> bool {
         index < EQUIP_COUNT
     }
@@ -97,9 +99,9 @@ impl Inventory {
 }
 
 /// Tags a spawned ability entity with the item it fulfills, so the sync system
-/// can reconcile inventory ↔ live abilities and the draft can find an item's
-/// entity. One such entity exists per *owned* item (equipped or backpack), for
-/// the whole run — so per-ability rank-ups applied to it survive un/re-equip.
+/// can reconcile inventory against live abilities and the draft can find an
+/// item's entity. One such entity exists per *owned* item (equipped or backpack)
+/// for the whole run, so per-ability rank-ups applied to it survive un/re-equip.
 #[derive(Component, Clone, Copy)]
 pub struct SlotItem(pub &'static ItemDef);
 
@@ -112,7 +114,7 @@ pub struct AbilityPlugin;
 impl Plugin for AbilityPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TemplateRegistry>()
-            // Item-machine location-zone transitions + the `Equipped` state marker.
+            // Item-machine location-zone transitions and the `Equipped` state marker.
             .register_transition::<EquipIt>()
             .register_transition::<Unequip>()
             .register_state_component::<Equipped>()
@@ -131,9 +133,8 @@ impl Plugin for AbilityPlugin {
                 Update,
                 (
                     update_aim,
-                    auto_invoke,
                     orbit_blades,
-                    // Launch sideways first, then curve in toward the target.
+                    // Launch sideways, then curve in toward the target.
                     (launch_homing, home_missiles).chain(),
                 )
                     .run_if(in_state(PlayingState::Running)),
@@ -143,11 +144,11 @@ impl Plugin for AbilityPlugin {
 
 /// Reconcile the owned item-machines against the player's `Inventory` whenever it
 /// changes (player spawn, draft acquire, inventory swap). One item state machine is
-/// **materialized per owned item** — equipped *or* backpack — and lives the whole
-/// run; equip/unequip only sends `EquipIt` / `Unequip` to drive its `Stored ↔
-/// Equipped` zone, never despawning it. That's what lets per-ability rank-ups
-/// (gauge instants applied to the machine by the draft) survive un/re-equip. Each
-/// machine carries `DespawnOnExit(Playing)`, so a run ending cleans it up.
+/// **materialized per owned item** (equipped or backpack) and lives the whole run;
+/// equip/unequip sends `EquipIt` / `Unequip` to drive its `Stored`/`Equipped`
+/// zone, keeping the entity alive. That lets per-ability rank-ups (gauge instants
+/// applied to the machine by the draft) survive un/re-equip. Each machine carries
+/// `DespawnOnExit(Playing)`, so a run ending cleans it up.
 fn sync_inventory(
     q_player: Query<(Entity, &Inventory), (With<Player>, Changed<Inventory>)>,
     q_live: Query<(Entity, &SlotItem)>,
@@ -157,8 +158,7 @@ fn sync_inventory(
         let live: Vec<(Entity, &'static ItemDef)> =
             q_live.iter().map(|(e, s)| (e, s.0)).collect();
 
-        // Discard: despawn any machine whose item left the inventory entirely (no
-        // discard UI yet, but keeps the reconcile total).
+        // Discard: despawn any machine whose item left the inventory entirely.
         for &(entity, def) in &live {
             if !inv.contains(def) {
                 commands.entity(entity).try_despawn();
@@ -179,10 +179,10 @@ fn sync_inventory(
 }
 
 /// Drive each item-machine's location zone to match its inventory slot, every
-/// frame. Idempotent and self-healing: it re-sends `EquipIt` until the machine's
-/// `Equipped` marker actually appears (so it survives the one-frame race between
-/// spawning a machine and its `Stored` state going active), and `Unequip` until
-/// the marker clears. Once the zone matches the slot, it sends nothing.
+/// frame. Idempotent and self-healing: re-sends `EquipIt` until the machine's
+/// `Equipped` marker appears (surviving the one-frame race between spawning a
+/// machine and its `Stored` state going active), and `Unequip` until the marker
+/// clears. Once the zone matches the slot, it sends nothing.
 fn drive_equip_zones(
     q_player: Query<&Inventory, With<Player>>,
     q_machines: Query<(Entity, &SlotItem, Has<Equipped>)>,
@@ -203,10 +203,10 @@ fn drive_equip_zones(
 }
 
 /// React to the `Equipped` state-marker landing on an item-machine root (its
-/// `Equipped` zone became active): reveal it and enable its collider. For invoked
-/// abilities the root has no visuals, so this is a harmless no-op; for the blade it
-/// brings the orbiter online. (The wearer passive is applied by the zone's own
-/// sustained-modifier sub-chart.)
+/// `Equipped` zone became active): reveal it and enable its collider. Invoked
+/// abilities have no visuals on the root, so this is a no-op for them; for the
+/// blade it brings the orbiter online. (The wearer passive is applied by the
+/// zone's own sustained-modifier sub-chart.)
 fn on_equipped(q_new: Query<Entity, Added<Equipped>>, mut commands: Commands) {
     for entity in &q_new {
         commands
@@ -217,7 +217,7 @@ fn on_equipped(q_new: Query<Entity, Added<Equipped>>, mut commands: Commands) {
 }
 
 /// React to the `Equipped` marker leaving (the item returned to its `Stored`
-/// zone): park the root — hidden and non-colliding — so a benched persistent
+/// zone): park the root, hidden and non-colliding, so a benched persistent
 /// ability does nothing while keeping its rank-up attributes.
 fn on_unequipped(
     mut removed: RemovedComponents<Equipped>,
@@ -225,7 +225,7 @@ fn on_unequipped(
     mut commands: Commands,
 ) {
     for entity in removed.read() {
-        // Skip machines that were despawned (run end) rather than parked.
+        // Skip machines despawned at run end; only park live ones.
         if q_item.get(entity).is_ok() {
             commands
                 .entity(entity)
@@ -255,15 +255,15 @@ fn update_aim(
     }
 }
 
-/// Fire homing projectiles out to the side on launch, so the curve back toward the
-/// target reads as homing rather than a straight shot.
+/// Fire homing projectiles out to the side on launch, so the curve back toward
+/// the target reads as homing.
 fn launch_homing(
     mut projectiles: Query<&mut LinearProjectile, (Added<LinearProjectile>, With<Homing>)>,
 ) {
     let mut rng = rand::rng();
     for mut proj in &mut projectiles {
         // Rotate the to-target heading by a wide random angle on the ground plane.
-        let magnitude = rng.random_range(1.0f32..1.9); // ~57°..109°
+        let magnitude = rng.random_range(1.0f32..1.9); // ~57..109 deg
         let sign = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
         let rot = Quat::from_axis_angle(Vec3::Y, magnitude * sign);
         proj.direction = (rot * proj.direction).normalize_or_zero();
@@ -308,30 +308,8 @@ fn home_missiles(
     }
 }
 
-/// Auto-fire: drive every item-machine's invoke loop each frame by holding
-/// `InvokeStatus::TryInvoke` (so it re-fires on each `Ready` re-entry) and writing
-/// `StartInvoke`. A `Stored` item's `Ready` state is inactive, so this no-ops for
-/// benched items — the `Equipped` zone is the firing gate. Persistent abilities
-/// (the blade) have no `Ready` state and simply ignore it.
-fn auto_invoke(
-    player: Query<&InvokerTarget, With<Player>>,
-    mut machines: Query<(Entity, &mut InvokeStatus), With<SlotItem>>,
-    mut writer: MessageWriter<StartInvoke>,
-) {
-    let Ok(target) = player.single() else {
-        return;
-    };
-    let aim = AbilityTarget::position(target.position);
-    for (entity, mut status) in &mut machines {
-        if *status != InvokeStatus::TryInvoke {
-            *status = InvokeStatus::TryInvoke;
-        }
-        writer.write(StartInvoke::new(entity, aim));
-    }
-}
-
 /// Circle each *equipped* orbiting blade around the player on the XZ plane. A
-/// benched blade keeps its angle but stops moving (and is hidden / non-colliding).
+/// benched blade keeps its angle but stops moving (hidden and non-colliding).
 fn orbit_blades(
     time: Res<Time>,
     player: Query<&GlobalTransform, With<Player>>,

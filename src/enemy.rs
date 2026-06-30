@@ -1,16 +1,18 @@
-//! Enemies: dumb chasers that home in on the player. The spawner drips them in
-//! around the player on a timer. Hit reactions and death rewards layer on once
-//! the damage pipeline lands.
+//! Enemies: chasers that home in on the player. The spawner drips them in around
+//! the player on a timer. Hit reactions and death rewards layer on once the
+//! damage pipeline lands.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use rand::Rng;
 
 use crate::attributes::{Died, Health, MoveSpeed};
-use crate::layers::{Layer, Team};
+use crate::damage::{DamageEffect, HitEffect};
+use crate::layers::{Layer, Team, TeamFilter};
 use crate::player::Player;
 use crate::stats::enemy_stats;
 use crate::states::PlayingState;
+use diesel_avian3d::prelude::{AbilityTarget, GoOff, InvokedBy};
 
 const SPAWN_INTERVAL: f32 = 1.5;
 const SPAWN_RING_RADIUS: f32 = 18.0;
@@ -24,18 +26,21 @@ const MELEE_INTERVAL: f32 = 1.0;
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct Enemy;
 
-/// Contact attack: deals `damage` to the player whenever in range and the timer
-/// is ready. (A placeholder for a proper diesel melee ability later.)
+/// Contact attack: on its cadence, fires a [`GoOff`] at the player through the
+/// shared damage pipeline (team filter, resistances, `DealtDamage`/`TookDamage`,
+/// `Hit`/`TookHit`). `effect` is the enemy's own melee `DamageEffect` entity,
+/// spawned `InvokedBy` the enemy in [`spawn_enemies`] and despawned with it in
+/// [`on_enemy_died`].
 #[derive(Component)]
 pub struct MeleeAttack {
-    damage: f32,
+    effect: Entity,
     timer: Timer,
 }
 
-impl Default for MeleeAttack {
-    fn default() -> Self {
+impl MeleeAttack {
+    fn new(effect: Entity) -> Self {
         Self {
-            damage: MELEE_DAMAGE,
+            effect,
             timer: Timer::from_seconds(MELEE_INTERVAL, TimerMode::Repeating),
         }
     }
@@ -113,39 +118,64 @@ fn spawn_enemies(
         origin.z + angle.sin() * SPAWN_RING_RADIUS,
     );
 
-    commands.spawn((
-        Name::new("Walker"),
-        Enemy,
-        Team::enemies(),
-        MeleeAttack::default(),
-        Health::default(),
-        MoveSpeed::default(),
-        enemy_stats(2.0, 2.5),
-        Mesh3d(assets.mesh.clone()),
-        MeshMaterial3d(assets.material.clone()),
-        Transform::from_translation(pos),
-        RigidBody::Kinematic,
-        Collider::capsule(0.3, 0.6),
-        CollisionLayers::new([Layer::Character], LayerMask::ALL),
-        TransformInterpolation,
-    ));
+    let enemy = commands
+        .spawn((
+            Name::new("Walker"),
+            Enemy,
+            Team::enemies(),
+            Health::default(),
+            MoveSpeed::default(),
+            enemy_stats(2.0, 2.5),
+            Mesh3d(assets.mesh.clone()),
+            MeshMaterial3d(assets.material.clone()),
+            Transform::from_translation(pos),
+            RigidBody::Kinematic,
+            Collider::capsule(0.3, 0.6),
+            CollisionLayers::new([Layer::Character], LayerMask::ALL),
+            TransformInterpolation,
+        ))
+        .id();
+
+    // The enemy's melee strike as a diesel effect: a `DamageEffect` leaf invoked
+    // by the enemy. `enemy_melee` fires a `GoOff` at it when the enemy is in
+    // range, so contact damage flows through the shared pipeline.
+    let melee = commands
+        .spawn((
+            Name::new("WalkerMelee"),
+            InvokedBy(enemy),
+            TeamFilter::Enemies,
+            HitEffect,
+            DamageEffect::physical(&MELEE_DAMAGE.to_string()),
+        ))
+        .id();
+    commands.entity(enemy).insert(MeleeAttack::new(melee));
 }
 
-/// Despawn an enemy when it dies. (Drops / XP layer on here later.)
-fn on_enemy_died(died: On<Died>, q_enemy: Query<(), With<Enemy>>, mut commands: Commands) {
-    if q_enemy.get(died.entity).is_ok()
-        && let Ok(mut entity) = commands.get_entity(died.entity)
-    {
+/// Despawn an enemy when it dies, along with its melee effect entity. (Drops and
+/// XP layer on here later.)
+fn on_enemy_died(
+    died: On<Died>,
+    q_enemy: Query<&MeleeAttack, With<Enemy>>,
+    mut commands: Commands,
+) {
+    let Ok(melee) = q_enemy.get(died.entity) else {
+        return;
+    };
+    if let Ok(mut effect) = commands.get_entity(melee.effect) {
+        effect.try_despawn();
+    }
+    if let Ok(mut entity) = commands.get_entity(died.entity) {
         entity.try_despawn();
     }
 }
 
-/// Enemies in range chew on the player on their attack cadence.
+/// Enemies in range attack the player on their attack cadence, firing their melee
+/// `DamageEffect` at the player through the shared damage pipeline.
 fn enemy_melee(
     time: Res<Time>,
     player: Query<(Entity, &GlobalTransform), With<Player>>,
     mut enemies: Query<(&GlobalTransform, &mut MeleeAttack), With<Enemy>>,
-    mut health: Query<&mut Health>,
+    mut go_off: MessageWriter<GoOff>,
 ) {
     let Ok((player_entity, player_tf)) = player.single() else {
         return;
@@ -155,9 +185,10 @@ fn enemy_melee(
         let fired = attack.timer.tick(time.delta()).just_finished();
         let in_range = enemy_tf.translation().distance(player_pos) <= MELEE_RANGE;
         if fired && in_range {
-            if let Ok(mut hp) = health.get_mut(player_entity) {
-                hp.current -= attack.damage;
-            }
+            go_off.write(GoOff::new(
+                attack.effect,
+                AbilityTarget::entity(player_entity, player_pos),
+            ));
         }
     }
 }

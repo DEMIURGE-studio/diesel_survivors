@@ -1,8 +1,7 @@
-//! Arrow — the Bow weapon's ability. A straight physical bolt volley (count scales
-//! with `ProjectileCount`). Its hit damage is drawn from the bow's own
-//! `Damage.base` via `@item`, so a stronger bow makes Arrow pierce harder with no
-//! change to the ability — the same cross-entity-source showcase as [`slice`], on
-//! a projectile instead of a melee sweep.
+//! Arrow: the Bow weapon's ability. A straight physical bolt volley (count scales
+//! with `ProjectileCount`). Hit damage is drawn from the bow's own `Damage.base`
+//! via `@item`, so a stronger bow makes Arrow pierce harder with no change to the
+//! ability. Same cross-entity source as [`slice`], on a projectile.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -30,7 +29,7 @@ fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, Some(SPEED), None)
 }
 
-/// Ready → Invoking (a `ProjectileCount`-long volley) → Cooldown.
+/// Ready -> Invoking (a `ProjectileCount`-long volley) -> Cooldown.
 fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
     Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| {
         repeater(
@@ -46,7 +45,7 @@ pub(crate) fn register_templates(registry: &mut TemplateRegistry) {
     registry.register(PROJECTILE, || Box::new(projectile()));
 }
 
-/// The bolt: Flying → Hit → Done. Flies straight (gravity off), dies on contact
+/// The bolt: Flying -> Hit -> Done. Flies straight (gravity off), dies on contact
 /// (physical damage from the bow's `@item`) or after 2s.
 fn projectile() -> impl Scene {
     bsn! {

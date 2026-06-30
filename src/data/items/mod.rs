@@ -1,15 +1,15 @@
-//! Items — the equippable unit, and the thing a slot actually holds.
+//! Items: the equippable unit a slot holds.
 //!
-//! An [`ItemDef`] bundles a **weapon type** (sword / bow / staff), the **ability**
-//! it grants, its own **local attributes** (a sword's `Damage.base`, read by the
-//! granted ability via `@item`), and a **wearer passive** it applies to the player
-//! while equipped. This is the gauge/diesel showcase the project is built around:
+//! An [`ItemDef`] bundles a weapon type (sword / bow / staff), the ability it
+//! grants, its own local attributes (a sword's `Damage.base`, read by the granted
+//! ability via `@item`), and a wearer passive it applies to the player while
+//! equipped. The gauge/diesel showcase the project is built around:
 //!
-//! - *Cross-entity sources* — the item is a separate entity carrying its own
+//! - Cross-entity sources: the item is a separate entity carrying its own
 //!   `Attributes`; the granted ability's effects read `Damage.base@item`, so a
-//!   beefier weapon raises the ability's damage with **no change to the ability**.
-//! - *Sustained modifiers* — the wearer passive applies on equip and cleanly
-//!   reverses on unequip/hot-swap, exactly like [`crate::data::buffs`].
+//!   beefier weapon raises the ability's damage with no change to the ability.
+//! - Sustained modifiers: the wearer passive applies on equip and reverses on
+//!   unequip/hot-swap, like [`crate::data::buffs`].
 //!
 //! The equip/hot-swap machinery that spawns the item entity, wires `@item`, and
 //! applies the passive lives in [`crate::ability`]. Slots hold `&'static ItemDef`.
@@ -26,8 +26,8 @@ pub mod machine;
 // Weapon types
 // ---------------------------------------------------------------------------
 
-/// The broad category of a weapon. Drives presentation today; a natural hook for
-/// class restrictions or per-type bonuses later.
+/// The broad category of a weapon. Drives presentation; a hook for class
+/// restrictions or per-type bonuses later.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum WeaponType {
     Sword,
@@ -46,13 +46,13 @@ impl WeaponType {
 }
 
 // ---------------------------------------------------------------------------
-// ItemDef — the data slots, the draft, and characters reference
+// ItemDef: the data slots, the draft, and characters reference
 // ---------------------------------------------------------------------------
 
 /// A piece of equipment as pure data: a stable id, a display name, a weapon type,
-/// the ability it grants, and two stat blocks — `local` (the item's own
-/// attributes, read by its ability via `@item`) and `wearer` (a passive applied
-/// to the player while equipped). Each lives as a `static`; the game holds
+/// the ability it grants, and two stat blocks. `local` is the item's own
+/// attributes, read by its ability via `@item`; `wearer` is a passive applied to
+/// the player while equipped. Each lives as a `static`; the game holds
 /// `&'static ItemDef` everywhere.
 pub struct ItemDef {
     pub id: &'static str,
@@ -64,7 +64,7 @@ pub struct ItemDef {
 }
 
 impl ItemDef {
-    /// Identity by id — each def is a unique static, so id equality is identity.
+    /// Identity by id: each def is a unique static, so id equality is identity.
     pub fn same(&self, other: &ItemDef) -> bool {
         self.id == other.id
     }
@@ -79,8 +79,8 @@ impl ItemDef {
 // Runtime link components (managed by the equip system in `crate::ability`)
 // ---------------------------------------------------------------------------
 
-/// Marker on a spawned item-machine root entity (the item *is* the ability
-/// root; its attributes are read as `@ability`/`@item`).
+/// Marker on a spawned item-machine root entity. The item is the ability root;
+/// its attributes are read as `@ability`/`@item`.
 #[derive(Component, Clone, Copy, Default)]
 pub struct Item;
 
@@ -92,19 +92,19 @@ fn empty() -> ModifierSet {
     ModifierSet::new()
 }
 
-/// A sword's local damage — Slice reads this via `@item`.
+/// A sword's local damage: Slice reads this via `@item`.
 fn sword_local() -> ModifierSet {
     mod_set! { "Damage.base" => 25.0 }
 }
-/// A sword keeps you light on your feet while wielded.
+/// A sword keeps the wielder light on their feet.
 fn sword_wearer() -> ModifierSet {
     mod_set! { "MoveSpeed" => 0.5 }
 }
-/// A bow's local damage — Arrow reads this via `@item`.
+/// A bow's local damage: Arrow reads this via `@item`.
 fn bow_local() -> ModifierSet {
     mod_set! { "Damage.base" => 14.0 }
 }
-/// A bow trains a faster draw — quicker projectiles while wielded.
+/// A bow trains a faster draw: quicker projectiles while wielded.
 fn bow_wearer() -> ModifierSet {
     mod_set! { "ProjectileSpeed" => 0.2 }
 }
@@ -113,7 +113,7 @@ fn bow_wearer() -> ModifierSet {
 // The catalog
 // ---------------------------------------------------------------------------
 
-// Weapons — the cross-entity-source showcase: their abilities read `@item`.
+// Weapons: the cross-entity-source showcase, their abilities read `@item`.
 pub static IRON_SWORD: ItemDef = ItemDef {
     id: "iron_sword",
     name: "Iron Sword",
@@ -139,7 +139,7 @@ pub static WHIRLING_BLADE: ItemDef = ItemDef {
     wearer: empty,
 };
 
-// Staves — the spell abilities. They scale through the player's own stats; the
+// Staves: the spell abilities. They scale through the player's own stats; the
 // item is the slottable shell that carries (and hot-swaps) the spell.
 pub static APPRENTICE_STAFF: ItemDef = ItemDef {
     id: "apprentice_staff",

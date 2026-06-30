@@ -1,9 +1,7 @@
-//! Firestorm — a long-cooldown meteor shower (modeled on bevy_diesel's firestorm
-//! example). A zone is placed high *above* the aimed target; its repeater drops
-//! several waves of falling explosive projectiles in a circle, each bursting into
-//! a fire AoE where it lands (on an enemy or the ground). Distinct from Fireball
-//! (one aimed burst) and Ice Storm (a placed pulsing zone): a barrage that rains
-//! down over an area.
+//! Firestorm: a long-cooldown meteor shower. A zone is placed high *above* the
+//! aimed target; its repeater drops several waves of falling explosive projectiles
+//! in a circle, each bursting into a fire AoE where it lands (on an enemy or the
+//! ground). A barrage that rains down over an area.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -20,7 +18,7 @@ const METEOR: &str = "abilities/firestorm_meteor";
 const BURST: &str = "abilities/firestorm_burst";
 
 const COOLDOWN: f32 = 6.0;
-/// Radius of each meteor's burst (also its mesh size — see `ProjectileAssets`).
+/// Radius of each meteor's burst (also its mesh size, see `ProjectileAssets`).
 pub(crate) const METEOR_RADIUS: f32 = 1.8;
 /// How high above the target the zone is placed (meteors fall from here).
 const ZONE_HEIGHT: f32 = 9.0;
@@ -44,7 +42,7 @@ fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, None, Some(METEOR_RADIUS))
 }
 
-/// The ability: a single shot that places the firestorm zone above the target.
+/// A single shot that places the firestorm zone above the target.
 fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
     Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| {
         single_shot(
@@ -64,8 +62,8 @@ pub(crate) fn register_templates(registry: &mut TemplateRegistry) {
 }
 
 /// The zone (invisible, high above the target): the shared [`storm_zone`] shell,
-/// dropping `WAVES` waves of `PER_WAVE` meteors scattered in a circle around
-/// itself. Each meteor falls and bursts where it lands.
+/// dropping `WAVES` waves of `PER_WAVE` meteors scattered in a circle around it.
+/// Each meteor falls and bursts where it lands.
 fn zone() -> impl Scene {
     storm_zone(
         "FirestormZone",
@@ -97,7 +95,7 @@ fn meteor() -> impl Scene {
         Substates [
             #Flying Transitions [
                 (Target(#Hit) MessageEdge::<CollidedEntity>::default()),
-                // Safety net: despawn if it somehow never collides.
+                // Safety net: despawn if it never collides.
                 (Target(#Done) AlwaysEdge Delay::from_secs_f32(4.0)),
             ],
             #Hit Substates [
@@ -112,7 +110,7 @@ fn meteor() -> impl Scene {
     }
 }
 
-/// The fire burst: gathers everything in radius and scorches it, then fades.
+/// Fire burst: gathers everything in radius and scorches it, then fades.
 fn burst() -> impl Scene {
     bsn! {
         #Root

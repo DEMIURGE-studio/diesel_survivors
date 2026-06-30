@@ -70,7 +70,7 @@ impl Upgrade {
         }
     }
 
-    /// Escalating cost: 10, 20, 30, …
+    /// Escalating cost: 10, 20, 30, ...
     fn cost(self, meta: &MetaProgress) -> u32 {
         (self.ranks(meta) + 1) * 10
     }
@@ -142,7 +142,7 @@ struct BuyButton(usize);
 fn upgrade_label(index: usize, meta: &MetaProgress) -> String {
     let up = Upgrade::ALL[index];
     format!(
-        "{}   rank {}   —   {} souls",
+        "{}   rank {}   -   {} souls",
         up.name(),
         up.ranks(meta),
         up.cost(meta),
@@ -167,7 +167,7 @@ fn spawn_upgrades_ui(mut commands: Commands, meta: Res<MetaProgress>) {
             }
             p.spawn(button("Back", GotoState(AppState::MainMenu)));
             p.spawn(label(
-                "Click, or 1 / 2 / 3 to buy  •  Esc to go back",
+                "Click, or 1 / 2 / 3 to buy  |  Esc to go back",
                 18.0,
                 Color::srgb(0.55, 0.55, 0.55),
             ));

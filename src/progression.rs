@@ -67,19 +67,19 @@ fn roll_tier(rng: &mut impl Rng) -> Tier {
 
 /// How an upgrade mutates a gauge attribute. Percentage ops scale by the stat's
 /// own current value (so they compound and never overshoot a floor); flat adds a
-/// fixed amount (for integer-ish stats like projectile count).
+/// fixed amount (for integer-like stats such as projectile count).
 #[derive(Clone, Copy)]
 enum Op {
-    /// `stat += stat * pct` — "more is better" (Damage, Area, …).
+    /// `stat += stat * pct`: "more is better" (Damage, Area, ...).
     AddPct,
-    /// `stat -= stat * pct` — "less is better", self-flooring (CooldownMult).
+    /// `stat -= stat * pct`: "less is better", self-flooring (CooldownMult).
     SubPct,
-    /// `stat += amount` — fixed step (ProjectileCount).
+    /// `stat += amount`: fixed step (ProjectileCount).
     AddFlat(f32),
 }
 
-/// Apply an upgrade to one attribute on `entity`. Built as an [`InstantModifierSet`]
-/// by hand (not the `instant!` macro) so the attribute name can be dynamic.
+/// Apply an upgrade to one attribute on `entity`. Builds the [`InstantModifierSet`]
+/// by hand so the attribute name can be dynamic.
 fn apply_op(stat: &str, op: Op, pct: f32, entity: Entity, attrs: &mut AttributesMut) {
     use diesel_avian3d::gauge::prelude::InstantModifierSet;
     let mut inst = InstantModifierSet::new();
@@ -150,11 +150,11 @@ enum DraftOption {
     Global { kind: usize, tier: Tier },
 }
 
-/// Format `+N%` / `−N%` / `+N` for a tier and op.
+/// Format `+N%` / `-N%` / `+N` for a tier and op.
 fn magnitude_label(op: Op, pct: f32) -> String {
     match op {
         Op::AddPct => format!("+{}%", (pct * 100.0).round() as i32),
-        Op::SubPct => format!("−{}%", (pct * 100.0).round() as i32),
+        Op::SubPct => format!("-{}%", (pct * 100.0).round() as i32),
         Op::AddFlat(amount) => format!("+{}", amount as i32),
     }
 }
@@ -162,14 +162,14 @@ fn magnitude_label(op: Op, pct: f32) -> String {
 impl DraftOption {
     fn label(&self) -> String {
         match self {
-            DraftOption::Equip(def) => format!("{} [{}] — New", def.name, def.weapon.label()),
+            DraftOption::Equip(def) => format!("{} [{}] - New", def.name, def.weapon.label()),
             DraftOption::AbilityUp { def, stat, tier } => {
                 let s = &ABILITY_STATS[*stat];
-                format!("{} — {} {} {}", def.name, tier.label, magnitude_label(s.op, tier.pct), s.label)
+                format!("{} - {} {} {}", def.name, tier.label, magnitude_label(s.op, tier.pct), s.label)
             }
             DraftOption::Global { kind, tier } => {
                 let g = &GLOBAL_UPGRADES[*kind];
-                format!("{} {} — {} {}", g.label, magnitude_label(g.op, tier.pct), tier.label, "(global)")
+                format!("{} {} - {} {}", g.label, magnitude_label(g.op, tier.pct), tier.label, "(global)")
             }
         }
     }
@@ -314,10 +314,9 @@ fn check_level_up(
     next.set(PlayingState::LevelUp);
 }
 
-/// Build the draft pool — new items (to the backpack) while there's room, a
-/// freshly-rolled per-stat rank-up for each stat an *equipped* ability carries,
-/// and a rolled global passive for each kind — then offer up to three distinct
-/// picks.
+/// Build the draft pool, then offer up to three distinct picks: new items (to the
+/// backpack) while there's room, a freshly-rolled per-stat rank-up for each stat an
+/// *equipped* ability carries, and a rolled global passive for each kind.
 fn open_draft(
     mut draft: ResMut<Draft>,
     player: Query<&Inventory, With<Player>>,
@@ -340,9 +339,9 @@ fn open_draft(
         }
     }
 
-    // Per-ability stat rank-ups — offer a stat only if the ability declares it
-    // (only AoE abilities have Area, only projectile abilities have Speed, the
-    // sustained blade has only Damage).
+    // Per-ability stat rank-ups: offer a stat only if the ability declares it.
+    // AoE abilities have Area, projectile abilities have Speed, the sustained
+    // blade has only Damage.
     for &def in &equipped {
         for idx in 0..ABILITY_STATS.len() {
             if ability_has_stat(def, idx) {
@@ -351,12 +350,12 @@ fn open_draft(
         }
     }
 
-    // Player-wide passives — one rolled option per kind.
+    // Player-wide passives: one rolled option per kind.
     for idx in 0..GLOBAL_UPGRADES.len() {
         pool.push(DraftOption::Global { kind: idx, tier: roll_tier(&mut rng) });
     }
 
-    // Partial Fisher–Yates: surface up to three distinct options.
+    // Partial Fisher-Yates: surface up to three distinct options.
     let offered = pool.len().min(3);
     for i in 0..offered {
         let j = rng.random_range(i..pool.len());

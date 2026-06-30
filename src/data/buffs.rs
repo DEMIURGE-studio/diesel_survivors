@@ -1,15 +1,14 @@
-//! Timed buffs as diesel **sustained-modifier scenes** — the same mechanism
-//! equipment uses to apply (and cleanly remove) attribute changes, but on a
-//! timer.
+//! Timed buffs as diesel sustained-modifier scenes: equipment's attribute-change
+//! mechanism on a timer.
 //!
-//! A buff is a tiny state machine attached to the player. Its `Active` state
+//! A buff is a small state machine attached to the player. Its `Active` state
 //! carries an [`AttributeModifiers`] set plus a [`SustainedModifierConfig`]
-//! targeting the invoker (the player, threaded in as `InvokedBy(player)`): the
+//! targeting the invoker (the player, threaded in as `InvokedBy(player)`). The
 //! sustained-modifier system applies those modifiers when the state gains
 //! `Active` and removes them when it loses it. An `AlwaysEdge` with a `Delay`
-//! leaves `Active` after the duration, which removes the modifiers and despawns
-//! the buff. Pick up a buff orb → temporary stat boost → it expires on its own,
-//! with nothing left behind.
+//! leaves `Active` after the duration, removing the modifiers and despawning the
+//! buff. Pick up a buff orb, get a temporary stat boost, and it expires on its
+//! own with nothing left behind.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
@@ -27,8 +26,8 @@ const HASTE_BONUS: f32 = 3.0;
 
 /// Shared shell: a buff that applies `mods` to `player` for `duration` seconds,
 /// then removes them and despawns. The modifiers live on the `#Active` state, so
-/// leaving it (on the timed edge) hands them straight to the sustained-modifier
-/// remover — no bookkeeping in game code.
+/// leaving it on the timed edge hands them to the sustained-modifier remover, no
+/// bookkeeping in game code.
 fn timed_buff(
     player: Entity,
     name: &'static str,

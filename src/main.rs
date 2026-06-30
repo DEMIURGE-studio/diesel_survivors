@@ -1,4 +1,4 @@
-//! diesel_survivors — a Vampire Survivors-like reference game showcasing
+//! diesel_survivors: a Vampire Survivors-like reference game showcasing
 //! bevy_diesel (abilities), bevy_gauge (attributes), and bevy_gearbox (state
 //! charts). Everything is authored as BSN scenes.
 
@@ -38,7 +38,7 @@ fn main() {
                 }),
                 ..default()
             }),
-            // PhysicsPlugins::default() already includes PhysicsInterpolationPlugin;
+            // PhysicsPlugins::default() includes PhysicsInterpolationPlugin;
             // bodies opt in per-entity via the `TransformInterpolation` component.
             PhysicsPlugins::default(),
             AvianBackend::plugin(),
@@ -69,8 +69,7 @@ fn main() {
         .run();
 }
 
-/// Top-down camera: fixed offset looking down at the play field. Follow/smoothing
-/// comes later with the player controller.
+/// Top-down camera: fixed offset looking down at the play field.
 fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Name::new("MainCamera"),

@@ -1,9 +1,9 @@
-//! Ability data. Each ability is a self-contained module — its BSN scene(s),
-//! its tuning consts, and a `static AbilityDef` describing it — and the game
-//! references abilities purely through `&'static AbilityDef` (no enum). The slot
-//! system, the level-up draft, and character starters all key off these defs.
+//! Ability data. Each ability is a self-contained module: its BSN scene(s), its
+//! tuning consts, and a `static AbilityDef` describing it. The game references
+//! abilities through `&'static AbilityDef`. The slot system, the level-up draft,
+//! and character starters all key off these defs.
 //!
-//! An ability is an `invoked` state-machine shell (Ready → Invoking → Cooldown)
+//! An ability is an `invoked` state-machine shell (Ready -> Invoking -> Cooldown)
 //! whose Invoking phase runs a `repeater` volley; the spawned projectile/zone is
 //! itself a small state chart. See any module here for the pattern.
 
@@ -26,7 +26,7 @@ pub mod orbiting_blade;
 pub mod slice;
 
 // ---------------------------------------------------------------------------
-// AbilityDef — the data the rest of the game references
+// AbilityDef: the data the rest of the game references
 // ---------------------------------------------------------------------------
 
 /// Which per-ability stats an ability exposes for level-up rank-ups. `Damage` is
@@ -39,17 +39,17 @@ pub struct AbilityStats {
     pub projectile_speed: bool,
 }
 
-/// A playable ability as pure data. Rather than a whole scene, an ability now
-/// contributes three pieces that the item state machine assembles (see
+/// A playable ability as pure data. An ability contributes three pieces that the
+/// item state machine assembles (see
 /// [`crate::data::items::machine::equipped_item`]):
 ///
-/// - `base` — the ability's root attributes (cooldown/area/projectile-speed +
+/// - `base`: the ability's root attributes (cooldown/area/projectile-speed +
 ///   `Damage` multiplier), merged with the item's `local` onto the item entity
-///   (which *is* the ability root, so `@ability`/`@item` resolve to it).
-/// - `region` — the behaviour merged onto the item's `Equipped` state: the
-///   `Ready→Invoking→Cooldown` auto-fire loop for invoked abilities, or the
+///   (which is the ability root, so `@ability`/`@item` resolve to it).
+/// - `region`: the behaviour merged onto the item's `Equipped` state: the
+///   `Ready->Invoking->Cooldown` auto-fire loop for invoked abilities, or the
 ///   blade's `Active` region. Active only while equipped.
-/// - `root_extras` — extra components on the item root (persistent visuals for
+/// - `root_extras`: extra components on the item root (persistent visuals for
 ///   the blade; a no-op for invoked abilities).
 pub struct AbilityDef {
     pub id: &'static str,
@@ -61,15 +61,15 @@ pub struct AbilityDef {
 }
 
 impl AbilityDef {
-    /// Identity by id — each def is a unique static, so id equality is identity.
+    /// Identity by id: each def is a unique static, so id equality is identity.
     pub fn same(&self, other: &AbilityDef) -> bool {
         self.id == other.id
     }
 }
 
 /// Default `root_extras` for abilities with no persistent root visuals (every
-/// invoked ability). Re-asserts the item root's parked `Visibility::Hidden` — a
-/// harmless no-op that's a valid scene to merge.
+/// invoked ability). Re-asserts the item root's parked `Visibility::Hidden`, a
+/// no-op that's a valid scene to merge.
 pub(crate) fn no_root_extras() -> Box<dyn Scene> {
     Box::new(bsn! { Visibility::Hidden })
 }
@@ -81,20 +81,20 @@ pub(crate) fn no_root_extras() -> Box<dyn Scene> {
 // Shared scene helpers
 // ---------------------------------------------------------------------------
 
-/// Single-component scene inserting `StateComponent(value)` (the canonical
-/// `template(…)` form, since `StateComponent`/its payloads aren't `Default`).
+/// Single-component scene inserting `StateComponent(value)` via the `template(...)`
+/// form, since `StateComponent` and its payloads aren't `Default`.
 pub(crate) fn state<T: Component + Clone>(value: T) -> impl Scene {
     let sc = StateComponent(value);
     bsn! { template(move |_| Ok(sc.clone())) }
 }
 
-/// Per-ability base attributes. Each stat is split into a plain `*Base` (the
-/// per-ability rank-up target — a level-up applies a gauge instant to it) and a
-/// derived *effective* value that folds in the matching player global; the
+/// Per-ability base attributes. Each stat splits into a plain `*Base` (the
+/// per-ability rank-up target: a level-up applies a gauge instant to it) and a
+/// derived effective value that folds in the matching player global. The
 /// ability's effects (and spawned projectiles) read the derived one as
 /// `"...@ability"`, resolved against the ability root's `@invoker` (the player):
-/// `Cooldown = CooldownBase × CooldownMult`, `Area = AreaBase × Area`,
-/// `ProjectileSpeed = ProjectileSpeedBase × ProjectileSpeed`.
+/// `Cooldown = CooldownBase * CooldownMult`, `Area = AreaBase * Area`,
+/// `ProjectileSpeed = ProjectileSpeedBase * ProjectileSpeed`.
 pub(crate) fn ability_base(
     cooldown: f32,
     projectile_speed: Option<f32>,
@@ -126,7 +126,7 @@ pub(crate) fn configure_projectile_spawn(template_id: &'static str) -> impl Scen
     }
 }
 
-/// Firing leaf that spawns a template at the aimed position (not the invoker).
+/// Firing leaf that spawns a template at the aimed position.
 pub(crate) fn configure_zone_spawn(template_id: &'static str) -> impl Scene {
     bsn! { SpawnConfig::target(template_id) }
 }
@@ -138,14 +138,14 @@ pub(crate) fn configure_root_spawn(template_id: &'static str) -> impl Scene {
 
 /// A placed "storm" zone shell: a state machine whose repeater drops `waves`
 /// waves of whatever `spawn` describes, then despawns once the volley is spent
-/// (the repeater emits `Done` → the zone transitions to a self-despawning state).
+/// (the repeater emits `Done`, the zone transitions to a self-despawning state).
 ///
-/// The per-wave payload — meteors that fall, missiles that home, motes that
-/// chill — lives *entirely* in `spawn` (a firing leaf referencing some projectile
-/// template). So once you have a projectile template, a new storm is this shell
-/// plus a one-line spawn leaf: see [`firestorm`] (meteors) and [`arcane_storm`]
-/// (reuses Magic Missile's homing bolt). The zone is invisible; placement and
-/// height come from the ability's spawn offset.
+/// The per-wave payload (meteors that fall, missiles that home, motes that chill)
+/// lives entirely in `spawn`, a firing leaf referencing some projectile template.
+/// Given a projectile template, a new storm is this shell plus a one-line spawn
+/// leaf: see [`firestorm`] (meteors) and [`arcane_storm`] (reuses Magic Missile's
+/// homing bolt). The zone is invisible; placement and height come from the
+/// ability's spawn offset.
 pub(crate) fn storm_zone(
     name: &'static str,
     waves: &'static str,
@@ -172,7 +172,7 @@ pub(crate) fn storm_zone(
 
 /// Marks a projectile that steers toward its target entity each frame. Projectiles
 /// launch out to the side and curve in at `turn_rate` radians/sec, so the homing
-/// is visible (and each ability gives it a distinct feel).
+/// is visible and each ability gives it a distinct feel.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct Homing {
     pub turn_rate: f32,
@@ -290,5 +290,5 @@ pub fn register_projectiles(mut registry: ResMut<TemplateRegistry>) {
     ice_storm::register_templates(&mut registry);
     firestorm::register_templates(&mut registry);
     arcane_storm::register_templates(&mut registry);
-    // orbiting_blade spawns nothing — it *is* the persistent entity.
+    // orbiting_blade spawns nothing: it is the persistent entity.
 }

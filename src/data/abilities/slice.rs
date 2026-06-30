@@ -1,9 +1,9 @@
-//! Slice — the Sword weapon's ability. A short-cooldown melee sweep: each invoke
+//! Slice: the Sword weapon's ability. A short-cooldown melee sweep: each invoke
 //! gathers every enemy in an arc around the wielder and deals physical damage
 //! drawn from the *weapon's* own `Damage.base` (read cross-entity via `@item`).
-//! Swapping to a heavier sword raises Slice's damage with no change to the
-//! ability — the gauge cross-entity-source showcase. The sweep radius scales with
-//! the ability's `Area`, so Area rank-ups widen the arc.
+//! Swapping to a heavier sword raises Slice's damage with no change to the ability.
+//! The sweep radius scales with the ability's `Area`, so Area rank-ups widen the
+//! arc.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
@@ -30,15 +30,15 @@ fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, None, Some(ARC_RADIUS))
 }
 
-/// Ready → Invoking (one terminal sweep) → Cooldown.
+/// Ready -> Invoking (one terminal sweep) -> Cooldown.
 fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
     Box::new(crate::data::items::machine::invoked_region(root, COOLDOWN, |root| {
         bsn! {
                 #Fire InvokedBy(root) TerminalState TeamFilter::Enemies
                     GoOffConfig::default()
                 Substates [
-                    // Gather every enemy in the arc around the wielder; the radius
-                    // is gauge-driven off `Area@ability` so it tracks Area rank-ups.
+                    // Gather every enemy in the arc around the wielder; radius is
+                    // gauge-driven off `Area@ability` so it tracks Area rank-ups.
                     #Sweep SubEffectOf(#Fire) InvokedBy(#Fire)
                         template(|_| Ok(TargetMutator::invoker()
                             .with_gatherer(AvianGatherer::AllEntitiesInRadius(ARC_RADIUS))))
