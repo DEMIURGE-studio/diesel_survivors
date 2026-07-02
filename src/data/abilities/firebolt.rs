@@ -50,8 +50,6 @@ fn projectile() -> impl Scene {
             Name::new("Firebolt")
             LinearProjectileEffect { speed: SPEED, horizontal: true }
             template(|_| Ok(bevy_gauge::attributes! { "Speed" => "ProjectileSpeed@ability" }))
-            // No `Homing`: a committed straight shot, aimed where the target is
-            // at fire time. The heavy-hitter's tradeoff.
             TeamFilter::Enemies
             CollisionLayers::new([Layer::Projectile], [Layer::Character])
             Collider::sphere(0.35)

@@ -2,6 +2,7 @@
 //! duration of a Playing session.
 
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, CommandsSceneExt};
 
 use crate::attributes::Health;
 use crate::meta::MetaProgress;
@@ -22,69 +23,57 @@ impl Plugin for HudPlugin {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Default)]
 struct HealthBarFill;
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Default)]
 struct XpText;
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Default)]
 struct SoulsText;
 
 fn spawn_hud(mut commands: Commands) {
-    commands
-        .spawn((
-            DespawnOnExit(AppState::Playing),
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(12.0),
-                left: Val::Px(12.0),
-                width: Val::Px(260.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(6.0),
-                ..default()
-            },
-        ))
-        .with_children(|p| {
+    commands.spawn_scene(bsn! {
+        template(|_| Ok(DespawnOnExit(AppState::Playing)))
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(12.0),
+            left: Val::Px(12.0),
+            width: Val::Px(260.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(6.0),
+        }
+        Children [
             // Health bar: dark track with a red fill whose width tracks HP.
-            p.spawn((
+            (
                 Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(22.0),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
-            ))
-            .with_children(|bar| {
-                bar.spawn((
-                    HealthBarFill,
+                }
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6))
+                Children [(
+                    HealthBarFill
                     Node {
                         width: Val::Percent(100.0),
                         height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.85, 0.2, 0.2)),
-                ));
-            });
-            p.spawn((
-                XpText,
-                Text::new("Lv 1"),
-                TextFont {
-                    font_size: FontSize::Px(20.0),
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-            ));
-            p.spawn((
-                SoulsText,
-                Text::new("Souls: 0"),
-                TextFont {
-                    font_size: FontSize::Px(18.0),
-                    ..default()
-                },
-                TextColor(Color::srgb(0.6, 1.0, 0.8)),
-            ));
-        });
+                    }
+                    BackgroundColor(Color::srgb(0.85, 0.2, 0.2))
+                )]
+            ),
+            (
+                XpText
+                Text::new("Lv 1")
+                TextFont { font_size: FontSize::Px(20.0) }
+                TextColor(Color::WHITE)
+            ),
+            (
+                SoulsText
+                Text::new("Souls: 0")
+                TextFont { font_size: FontSize::Px(18.0) }
+                TextColor(Color::srgb(0.6, 1.0, 0.8))
+            ),
+        ]
+    });
 }
 
 fn update_health_bar(

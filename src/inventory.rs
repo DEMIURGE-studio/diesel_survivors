@@ -7,6 +7,7 @@
 //! ability hot-swap (see [`crate::ability`]). Backpack-only swaps reorder.
 
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, CommandsSceneExt, Scene};
 
 use crate::ability::{Inventory, EQUIP_COUNT, TOTAL_SLOTS};
 use crate::player::Player;
@@ -47,79 +48,62 @@ fn reset_selection(mut selection: ResMut<Selection>) {
 }
 
 fn spawn_panel(mut commands: Commands) {
-    commands
-        .spawn((
-            DespawnOnExit(AppState::Playing),
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(12.0),
-                right: Val::Px(12.0),
-                width: Val::Px(190.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(4.0),
-                padding: UiRect::all(Val::Px(8.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.55)),
-        ))
-        .with_children(|p| {
-            p.spawn(heading("Equipped"));
-            for i in 0..EQUIP_COUNT {
-                p.spawn(slot(i));
-            }
-            p.spawn(heading("Backpack"));
-            for i in EQUIP_COUNT..TOTAL_SLOTS {
-                p.spawn(slot(i));
-            }
-            p.spawn((
-                Text::new("Click a slot, then another, to swap"),
-                TextFont {
-                    font_size: FontSize::Px(11.0),
-                    ..default()
-                },
-                TextColor(Color::srgb(0.5, 0.5, 0.55)),
-                Node {
-                    margin: UiRect::top(Val::Px(4.0)),
-                    ..default()
-                },
-            ));
-        });
-}
+    let equip: Vec<_> = (0..EQUIP_COUNT).map(slot).collect();
+    let backpack: Vec<_> = (EQUIP_COUNT..TOTAL_SLOTS).map(slot).collect();
 
-fn heading(text: &str) -> impl Bundle {
-    (
-        Text::new(text),
-        TextFont {
-            font_size: FontSize::Px(14.0),
-            ..default()
-        },
-        TextColor(Color::srgb(0.7, 0.7, 0.82)),
+    commands.spawn_scene(bsn! {
+        template(|_| Ok(DespawnOnExit(AppState::Playing)))
         Node {
-            margin: UiRect::top(Val::Px(4.0)),
-            ..default()
-        },
-    )
+            position_type: PositionType::Absolute,
+            top: Val::Px(12.0),
+            right: Val::Px(12.0),
+            width: Val::Px(190.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(4.0),
+            padding: UiRect::all(Val::Px(8.0)),
+        }
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.55))
+        Children [
+            heading("Equipped"),
+            { equip },
+            heading("Backpack"),
+            { backpack },
+            (
+                Text::new("Click a slot, then another, to swap")
+                TextFont { font_size: FontSize::Px(11.0) }
+                TextColor(Color::srgb(0.5, 0.5, 0.55))
+                Node { margin: UiRect::top(Val::Px(4.0)) }
+            ),
+        ]
+    });
 }
 
-fn slot(index: usize) -> impl Bundle {
-    (
-        Button,
-        SlotButton(index),
+fn heading(text: &str) -> impl Scene + use<> {
+    // Own the text so the scene is `'static`; see `crate::ui::button`.
+    let text = Text::new(text);
+    bsn! {
+        template(move |_| Ok(text.clone()))
+        TextFont { font_size: FontSize::Px(14.0) }
+        TextColor(Color::srgb(0.7, 0.7, 0.82))
+        Node { margin: UiRect::top(Val::Px(4.0)) }
+    }
+}
+
+fn slot(index: usize) -> impl Scene {
+    bsn! {
+        Button
+        template(move |_| Ok(SlotButton(index)))
         Node {
             width: Val::Percent(100.0),
             min_height: Val::Px(26.0),
             padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
             align_items: AlignItems::Center,
-            ..default()
-        },
-        BackgroundColor(EMPTY),
-        Text::new("-"),
-        TextFont {
-            font_size: FontSize::Px(13.0),
-            ..default()
-        },
-        TextColor(Color::WHITE),
-    )
+        }
+        BackgroundColor(EMPTY)
+        Text::new("-")
+        TextFont { font_size: FontSize::Px(13.0) }
+        TextColor(Color::WHITE)
+    }
 }
 
 /// Two-click swap: first click picks a slot up, second click swaps it with the

@@ -3,6 +3,7 @@
 //! and respawns the player.
 
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, CommandsSceneExt};
 
 use crate::attributes::Died;
 use crate::enemy::Enemy;
@@ -20,7 +21,7 @@ impl Plugin for GameOverPlugin {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Default)]
 struct GameOverUi;
 
 /// When the player dies, end the run and despawn it (its abilities are
@@ -50,28 +51,21 @@ fn reset_arena(mut commands: Commands, enemies: Query<Entity, With<Enemy>>) {
 }
 
 fn spawn_game_over_ui(mut commands: Commands) {
-    commands
-        .spawn((
-            GameOverUi,
-            DespawnOnExit(AppState::GameOver),
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new("You Died\nPress R to Restart"),
-                TextFont {
-                    font_size: FontSize::Px(48.0),
-                    ..default()
-                },
-                TextColor(Color::srgb(1.0, 0.35, 0.35)),
-            ));
-        });
+    commands.spawn_scene(bsn! {
+        GameOverUi
+        template(|_| Ok(DespawnOnExit(AppState::GameOver)))
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+        }
+        Children [(
+            Text::new("You Died\nPress R to Restart")
+            TextFont { font_size: FontSize::Px(48.0) }
+            TextColor(Color::srgb(1.0, 0.35, 0.35))
+        )]
+    });
 }
 
 fn restart(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<AppState>>) {

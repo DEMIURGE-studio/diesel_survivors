@@ -4,6 +4,7 @@
 use std::fs;
 
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, CommandsSceneExt};
 use diesel_avian3d::gauge::prelude::ModifierSet;
 use serde::{Deserialize, Serialize};
 
@@ -133,7 +134,7 @@ fn save_on_death(meta: Res<MetaProgress>) {
 }
 
 /// Header text showing the soul balance.
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Default)]
 struct SoulsHeader;
 
 /// A buy button for `Upgrade::ALL[index]`; its own text shows rank + cost.
@@ -151,28 +152,23 @@ fn upgrade_label(index: usize, meta: &MetaProgress) -> String {
 }
 
 fn spawn_upgrades_ui(mut commands: Commands, meta: Res<MetaProgress>) {
-    commands
-        .spawn(screen(AppState::Upgrades))
-        .with_children(|p| {
-            p.spawn(title("Upgrades"));
-            p.spawn((
-                SoulsHeader,
-                label(
-                    &format!("Souls: {}", meta.souls),
-                    26.0,
-                    Color::srgb(0.6, 1.0, 0.8),
-                ),
-            ));
-            for i in 0..Upgrade::ALL.len() {
-                p.spawn(button(&upgrade_label(i, &meta), BuyButton(i)));
-            }
-            p.spawn(button("Back", GotoState(AppState::MainMenu)));
-            p.spawn(label(
-                "Click, or 1 / 2 / 3 to buy  |  Esc to go back",
-                18.0,
-                Color::srgb(0.55, 0.55, 0.55),
-            ));
-        });
+    let buys: Vec<_> = (0..Upgrade::ALL.len())
+        .map(|i| button(&upgrade_label(i, &meta), BuyButton(i)))
+        .collect();
+
+    commands.spawn_scene(bsn! {
+        screen(AppState::Upgrades)
+        Children [
+            title("Upgrades"),
+            (
+                label(&format!("Souls: {}", meta.souls), 26.0, Color::srgb(0.6, 1.0, 0.8))
+                SoulsHeader
+            ),
+            { buys },
+            button("Back", GotoState(AppState::MainMenu)),
+            label("Click, or 1 / 2 / 3 to buy  |  Esc to go back", 18.0, Color::srgb(0.55, 0.55, 0.55)),
+        ]
+    });
 }
 
 /// Keep the soul header and each buy button's label in sync with the bank.

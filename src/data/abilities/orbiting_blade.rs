@@ -21,8 +21,6 @@ pub static DEF: AbilityDef = AbilityDef {
     stats: AbilityStats { cooldown: false, area: false, projectile_speed: false },
 };
 
-/// No extra base attributes. The item builder seeds the `Damage` multiplier
-/// (1.0) every ability shares, the blade's only rank-up.
 fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
     diesel_avian3d::gauge::prelude::ModifierSet::new()
 }
@@ -53,7 +51,7 @@ fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
     Box::new(bsn! {
         InitialState(#Active)
         Substates [
-            #Active Name::new("Active") Transitions [
+            #Active Transitions [
                 (Target(#Active) MessageEdge::<CollidedEntity>::default())
             ] Substates [
                 (SubEffectOf(#Active) InvokedBy(root)

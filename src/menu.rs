@@ -2,6 +2,7 @@
 //! key shortcuts (Enter / 1 / 2 / U).
 
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, CommandsSceneExt, Scene};
 
 use crate::data::characters::{self, Character, SelectedCharacter};
 use crate::states::AppState;
@@ -29,15 +30,14 @@ impl Plugin for MenuPlugin {
 struct CharButton(Character);
 
 fn spawn_main_menu(mut commands: Commands) {
-    commands.spawn(screen(AppState::MainMenu)).with_children(|p| {
-        p.spawn(title("DIESEL SURVIVORS"));
-        p.spawn(button("Play", GotoState(AppState::CharSelect)));
-        p.spawn(button("Upgrades", GotoState(AppState::Upgrades)));
-        p.spawn(label(
-            "Enter to play  |  U for upgrades",
-            18.0,
-            Color::srgb(0.55, 0.55, 0.55),
-        ));
+    commands.spawn_scene(bsn! {
+        screen(AppState::MainMenu)
+        Children [
+            title("DIESEL SURVIVORS"),
+            button("Play", GotoState(AppState::CharSelect)),
+            button("Upgrades", GotoState(AppState::Upgrades)),
+            label("Enter to play  |  U for upgrades", 18.0, Color::srgb(0.55, 0.55, 0.55)),
+        ]
     });
 }
 
@@ -50,20 +50,26 @@ fn main_menu_keys(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<Ap
 }
 
 fn spawn_char_select(mut commands: Commands) {
-    commands
-        .spawn(screen(AppState::CharSelect))
-        .with_children(|p| {
-            p.spawn(title("Choose Your Survivor"));
-            for character in characters::all() {
-                p.spawn(button(character.name, CharButton(character)));
-                p.spawn(label(character.blurb, 18.0, Color::srgb(0.65, 0.65, 0.65)));
-            }
-            p.spawn(label(
-                "Click, or press 1-8",
-                18.0,
-                Color::srgb(0.55, 0.55, 0.55),
-            ));
-        });
+    // One button + one blurb label per character. They are different scene types,
+    // so box them into a single child list the `Children [...]` spread can flatten.
+    let roster: Vec<Box<dyn Scene>> = characters::all()
+        .into_iter()
+        .flat_map(|character| {
+            [
+                Box::new(button(character.name, CharButton(character))) as Box<dyn Scene>,
+                Box::new(label(character.blurb, 18.0, Color::srgb(0.65, 0.65, 0.65))) as Box<dyn Scene>,
+            ]
+        })
+        .collect();
+
+    commands.spawn_scene(bsn! {
+        screen(AppState::CharSelect)
+        Children [
+            title("Choose Your Survivor"),
+            { roster },
+            label("Click, or press 1-8", 18.0, Color::srgb(0.55, 0.55, 0.55)),
+        ]
+    });
 }
 
 fn begin_run(commands: &mut Commands, next: &mut NextState<AppState>, character: Character) {

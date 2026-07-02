@@ -15,6 +15,7 @@ use crate::player::Player;
 use crate::stats::attr;
 use crate::states::{AppState, PlayingState};
 use crate::ui::{button, title};
+use bevy::scene::prelude::{bsn, CommandsSceneExt};
 
 const GEM_VALUE: u32 = 1;
 const GEM_ATTRACT_SPEED: f32 = 14.0;
@@ -184,7 +185,7 @@ struct Draft {
     options: Vec<DraftOption>,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Default)]
 struct LevelUpUi;
 
 /// A draft choice button for `Draft::options[index]`.
@@ -367,26 +368,29 @@ fn open_draft(
     pool.truncate(offered);
     draft.options = pool;
 
-    commands
-        .spawn((
-            LevelUpUi,
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                row_gap: Val::Px(14.0),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
-        ))
-        .with_children(|p| {
-            p.spawn(title("Level Up! Choose an Upgrade"));
-            for (i, option) in draft.options.iter().enumerate() {
-                p.spawn(button(&option.label(), DraftButton(i)));
-            }
-        });
+    let picks: Vec<_> = draft
+        .options
+        .iter()
+        .enumerate()
+        .map(|(i, option)| button(&option.label(), DraftButton(i)))
+        .collect();
+
+    commands.spawn_scene(bsn! {
+        LevelUpUi
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            row_gap: Val::Px(14.0),
+        }
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7))
+        Children [
+            title("Level Up! Choose an Upgrade"),
+            { picks },
+        ]
+    });
 }
 
 /// Resolve a draft pick: acquire a new item into the backpack, apply a per-ability

@@ -104,19 +104,15 @@ where
     bsn! {
         InitialState(#Ready)
         Substates [
-            #Ready Name::new("Ready") Transitions [
-                // Auto-advance: the loop self-drives while `Equipped` is active,
-                // no external trigger. The `Equipped` zone is the firing gate.
+            #Ready Transitions [
                 (Target(#Invoking) AlwaysEdge)
             ],
-            #Invoking Name::new("Invoking") InitialState(#Inner) Transitions [
+            #Invoking InitialState(#Inner) Transitions [
                 (Target(#Cooldown) MessageEdge::<Done>::default())
             ] Substates [
                 #Inner make_inner(root)
             ],
-            // Cooldown's `Delay` aliases the item's `Cooldown@ability`, so cooldown
-            // rank-ups change the fire rate live.
-            #Cooldown Name::new("Cooldown") Transitions [
+            #Cooldown Transitions [
                 (Target(#Ready) AlwaysEdge Delay::from_secs_f32(cooldown_secs)
                     InvokedBy(root)
                     template(|_| Ok(bevy_gauge::attributes! { "Delay" => "Cooldown@ability" })))
@@ -177,12 +173,12 @@ fn equip_zone(root: EntityTemplate, def: &'static ItemDef) -> impl Scene {
     let region = (def.ability.region)(root);
 
     bsn! {
-        Name::new("EquipZone") InitialState(#Stored)
+        #EquipZone InitialState(#Stored)
         Substates [
-            #Stored Name::new("Stored") Transitions [
+            #Stored Transitions [
                 (Target(#Equipped) MessageEdge::<EquipIt>::default())
             ],
-            #Equipped Name::new("Equipped") state(Equipped)
+            #Equipped state(Equipped)
                 InvokedBy(root)
                 template(move |_| Ok(AttributeModifiers(wearer.clone())))
                 SustainedModifierConfig::invoker()
