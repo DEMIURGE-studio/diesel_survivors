@@ -33,8 +33,8 @@ impl Team {
 pub const PLAYER_TEAM: Team = Team(0);
 pub const ENEMY_TEAM: Team = Team(1);
 
-/// Filters diesel hits by team. `Enemies` lets an ability hit only entities on
-/// a different team than its invoker.
+/// Filters diesel hits by team. `Enemies` restricts an ability to entities on a
+/// different team than its invoker.
 #[derive(Component, Clone, Debug, Default, FromTemplate)]
 pub enum TeamFilter {
     #[default]

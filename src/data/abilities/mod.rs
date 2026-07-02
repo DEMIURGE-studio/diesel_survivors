@@ -1,0 +1,294 @@
+//! Ability data. Each ability is a self-contained module: its BSN scene(s), its
+//! tuning consts, and a `static AbilityDef` describing it. The game references
+//! abilities through `&'static AbilityDef`. The slot system, the level-up draft,
+//! and character starters all key off these defs.
+//!
+//! An ability is an `invoked` state-machine shell (Ready -> Invoking -> Cooldown)
+//! whose Invoking phase runs a `repeater` volley; the spawned projectile/zone is
+//! itself a small state chart. See any module here for the pattern.
+
+use bevy::ecs::template::EntityTemplate;
+use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, Scene};
+use diesel_avian3d::gauge::prelude::ModifierSet;
+use diesel_avian3d::prelude::*;
+use diesel_avian3d::DirectionOffset;
+
+pub mod arcane_storm;
+pub mod arrow;
+pub mod fireball;
+pub mod firebolt;
+pub mod firestorm;
+pub mod frost_shard;
+pub mod ice_storm;
+pub mod magic_missile;
+pub mod orbiting_blade;
+pub mod slice;
+
+// ---------------------------------------------------------------------------
+// AbilityDef: the data the rest of the game references
+// ---------------------------------------------------------------------------
+
+/// Which per-ability stats an ability exposes for level-up rank-ups. `Damage` is
+/// always rankable; the rest depend on what the ability's scene actually carries
+/// (only AoE abilities have `AreaBase`, only projectile abilities have
+/// `ProjectileSpeedBase`, only `invoked` abilities have `CooldownBase`).
+pub struct AbilityStats {
+    pub cooldown: bool,
+    pub area: bool,
+    pub projectile_speed: bool,
+}
+
+/// A playable ability as pure data. An ability contributes three pieces that the
+/// item state machine assembles (see
+/// [`crate::data::items::machine::equipped_item`]):
+///
+/// - `base`: the ability's root attributes (cooldown/area/projectile-speed +
+///   `Damage` multiplier), merged with the item's `local` onto the item entity
+///   (which is the ability root, so `@ability`/`@item` resolve to it).
+/// - `region`: the behaviour merged onto the item's `Equipped` state: the
+///   `Ready->Invoking->Cooldown` auto-fire loop for invoked abilities, or the
+///   blade's `Active` region. Active only while equipped.
+/// - `root_extras`: extra components on the item root (persistent visuals for
+///   the blade; a no-op for invoked abilities).
+pub struct AbilityDef {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub base: fn() -> ModifierSet,
+    pub region: fn(EntityTemplate) -> Box<dyn Scene>,
+    pub root_extras: fn() -> Box<dyn Scene>,
+    pub stats: AbilityStats,
+}
+
+impl AbilityDef {
+    /// Identity by id: each def is a unique static, so id equality is identity.
+    pub fn same(&self, other: &AbilityDef) -> bool {
+        self.id == other.id
+    }
+}
+
+/// Default `root_extras` for abilities with no persistent root visuals (every
+/// invoked ability). Re-asserts the item root's parked `Visibility::Hidden`, a
+/// no-op that's a valid scene to merge.
+pub(crate) fn no_root_extras() -> Box<dyn Scene> {
+    Box::new(bsn! { Visibility::Hidden })
+}
+
+// Abilities are referenced through the items that grant them; see
+// [`crate::data::items`] for the equippable catalog (`items::ALL`).
+
+// ---------------------------------------------------------------------------
+// Shared scene helpers
+// ---------------------------------------------------------------------------
+
+/// Single-component scene inserting `StateComponent(value)` via the `template(...)`
+/// form, since `StateComponent` and its payloads aren't `Default`.
+pub(crate) fn state<T: Component + Clone>(value: T) -> impl Scene {
+    let sc = StateComponent(value);
+    bsn! { template(move |_| Ok(sc.clone())) }
+}
+
+/// Per-ability base attributes. Each stat splits into a plain `*Base` (the
+/// per-ability rank-up target: a level-up applies a gauge instant to it) and a
+/// derived effective value that folds in the matching player global. The
+/// ability's effects (and spawned projectiles) read the derived one as
+/// `"...@ability"`, resolved against the ability root's `@invoker` (the player):
+/// `Cooldown = CooldownBase * CooldownMult`, `Area = AreaBase * Area`,
+/// `ProjectileSpeed = ProjectileSpeedBase * ProjectileSpeed`.
+pub(crate) fn ability_base(
+    cooldown: f32,
+    projectile_speed: Option<f32>,
+    area: Option<f32>,
+) -> ModifierSet {
+    let mut set = ModifierSet::new();
+    set.add("CooldownBase", cooldown);
+    set.add_expr("Cooldown", "CooldownBase * CooldownMult@invoker");
+    if let Some(speed) = projectile_speed {
+        set.add("ProjectileSpeedBase", speed);
+        set.add_expr("ProjectileSpeed", "ProjectileSpeedBase * ProjectileSpeed@invoker");
+    }
+    if let Some(radius) = area {
+        set.add("AreaBase", radius);
+        set.add_expr("Area", "AreaBase * Area@invoker");
+    }
+    set
+}
+
+/// Firing leaf: spawn a projectile template at the invoker (at enemy mid-height),
+/// aimed at whatever the invoker is targeting.
+pub(crate) fn configure_projectile_spawn(template_id: &'static str) -> impl Scene {
+    bsn! {
+        SpawnConfig::invoker_offset_target(
+            template_id,
+            Vec3Offset::Fixed(DirectionOffset::new(Dir3::Y, 0.0)),
+            TargetGenerator::at_invoker_target(),
+        )
+    }
+}
+
+/// Firing leaf that spawns a template at the aimed position.
+pub(crate) fn configure_zone_spawn(template_id: &'static str) -> impl Scene {
+    bsn! { SpawnConfig::target(template_id) }
+}
+
+/// Firing leaf that spawns a template at the spawner's own root position.
+pub(crate) fn configure_root_spawn(template_id: &'static str) -> impl Scene {
+    bsn! { SpawnConfig::root(template_id) }
+}
+
+/// A placed "storm" zone shell: a state machine whose repeater drops `waves`
+/// waves of whatever `spawn` describes, then despawns once the volley is spent
+/// (the repeater emits `Done`, the zone transitions to a self-despawning state).
+///
+/// The per-wave payload (meteors that fall, missiles that home, motes that chill)
+/// lives entirely in `spawn`, a firing leaf referencing some projectile template.
+/// Given a projectile template, a new storm is this shell plus a one-line spawn
+/// leaf: see [`firestorm`] (meteors) and [`arcane_storm`] (reuses Magic Missile's
+/// homing bolt). The zone is invisible; placement and height come from the
+/// ability's spawn offset.
+pub(crate) fn storm_zone(
+    name: &'static str,
+    waves: &'static str,
+    wave_interval: &'static str,
+    spawn: impl Scene,
+) -> impl Scene {
+    bsn! {
+        #Root
+            Name::new(name)
+            StateMachine InitialState(#RepeaterSlot)
+            Transitions [
+                (Target(#Done) MessageEdge::<Done>::default())
+            ]
+        Substates [
+            #RepeaterSlot repeater(#Root, waves, wave_interval, spawn),
+            #Done state(DelayedDespawn::now()),
+        ]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Runtime components authored in ability scenes (queried by `crate::ability`)
+// ---------------------------------------------------------------------------
+
+/// Marks a projectile that steers toward its target entity each frame. Projectiles
+/// launch out to the side and curve in at `turn_rate` radians/sec, so the homing
+/// is visible and each ability gives it a distinct feel.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct Homing {
+    pub turn_rate: f32,
+}
+
+/// A blade that circles its invoker. The orbit system advances `angle`.
+#[derive(Component, Default, Clone)]
+pub struct Orbiter {
+    pub angle: f32,
+}
+
+/// Despawns its entity once the timer finishes. Used by transient AoE bursts.
+#[derive(Component)]
+pub struct Lifetime(pub Timer);
+
+impl Lifetime {
+    pub(crate) fn secs(secs: f32) -> Self {
+        Self(Timer::from_seconds(secs, TimerMode::Once))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cached visual handles for hot-spawned projectiles
+// ---------------------------------------------------------------------------
+
+#[derive(Resource)]
+pub struct ProjectileAssets {
+    pub missile_mesh: Handle<Mesh>,
+    pub missile_material: Handle<StandardMaterial>,
+    pub firebolt_mesh: Handle<Mesh>,
+    pub firebolt_material: Handle<StandardMaterial>,
+    pub frost_mesh: Handle<Mesh>,
+    pub frost_material: Handle<StandardMaterial>,
+    pub explosion_mesh: Handle<Mesh>,
+    pub explosion_material: Handle<StandardMaterial>,
+    pub pulse_mesh: Handle<Mesh>,
+    pub pulse_material: Handle<StandardMaterial>,
+    pub storm_mesh: Handle<Mesh>,
+    pub storm_material: Handle<StandardMaterial>,
+    pub blade_mesh: Handle<Mesh>,
+    pub blade_material: Handle<StandardMaterial>,
+    pub meteor_mesh: Handle<Mesh>,
+    pub meteor_material: Handle<StandardMaterial>,
+}
+
+/// Build the cached projectile/AoE visual handles once at startup.
+pub fn setup_projectile_assets(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    commands.insert_resource(ProjectileAssets {
+        missile_mesh: meshes.add(Sphere::new(0.15)),
+        missile_material: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.6, 0.4, 1.0),
+            emissive: LinearRgba::new(2.0, 1.0, 5.0, 1.0),
+            ..default()
+        }),
+        firebolt_mesh: meshes.add(Sphere::new(0.35)),
+        firebolt_material: materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 0.4, 0.1),
+            emissive: LinearRgba::new(6.0, 2.0, 0.0, 1.0),
+            ..default()
+        }),
+        frost_mesh: meshes.add(Sphere::new(0.12)),
+        frost_material: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.5, 0.85, 1.0),
+            emissive: LinearRgba::new(1.0, 3.0, 5.0, 1.0),
+            ..default()
+        }),
+        explosion_mesh: meshes.add(Sphere::new(fireball::EXPLOSION_RADIUS)),
+        explosion_material: materials.add(StandardMaterial {
+            base_color: Color::srgba(1.0, 0.5, 0.1, 0.35),
+            emissive: LinearRgba::new(6.0, 2.0, 0.0, 1.0),
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        }),
+        pulse_mesh: meshes.add(Sphere::new(ice_storm::STORM_RADIUS)),
+        pulse_material: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.5, 0.85, 1.0, 0.3),
+            emissive: LinearRgba::new(1.0, 3.0, 5.0, 1.0),
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        }),
+        storm_mesh: meshes.add(Cylinder::new(ice_storm::STORM_RADIUS, 0.1)),
+        storm_material: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.4, 0.8, 1.0, 0.25),
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        }),
+        blade_mesh: meshes.add(Cuboid::new(0.5, 0.15, 0.15)),
+        blade_material: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.85, 0.9, 1.0),
+            emissive: LinearRgba::new(2.0, 2.0, 3.0, 1.0),
+            ..default()
+        }),
+        meteor_mesh: meshes.add(Sphere::new(firestorm::METEOR_RADIUS)),
+        meteor_material: materials.add(StandardMaterial {
+            base_color: Color::srgba(1.0, 0.35, 0.05, 0.4),
+            emissive: LinearRgba::new(8.0, 2.5, 0.0, 1.0),
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        }),
+    });
+}
+
+/// Register every ability's spawned projectile/zone templates with the diesel
+/// runtime registry. Each module registers its own.
+pub fn register_projectiles(mut registry: ResMut<TemplateRegistry>) {
+    magic_missile::register_templates(&mut registry);
+    arrow::register_templates(&mut registry);
+    firebolt::register_templates(&mut registry);
+    frost_shard::register_templates(&mut registry);
+    fireball::register_templates(&mut registry);
+    ice_storm::register_templates(&mut registry);
+    firestorm::register_templates(&mut registry);
+    arcane_storm::register_templates(&mut registry);
+    // orbiting_blade spawns nothing: it is the persistent entity.
+}
