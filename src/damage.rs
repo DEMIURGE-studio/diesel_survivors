@@ -181,7 +181,7 @@ fn damage_effect_system(
         // `value_tagged` returns 0 until some other path registers that query,
         // making resistances silently never apply.
         let resistance = attributes
-            .evaluate_tagged(defender, "Resistance", effect.damage_type)
+            .evaluate_tagged(defender, crate::stats::attr::RESISTANCE, effect.damage_type)
             .clamp(0.0, 1.0);
 
         let final_damage = raw * (1.0 - resistance);

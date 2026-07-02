@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::attributes::Died;
 use crate::enemy::Enemy;
+use crate::stats::attr;
 use crate::states::AppState;
 use crate::ui::{button, label, screen, title, GotoState};
 
@@ -32,13 +33,13 @@ impl MetaProgress {
     /// Fold the purchased ranks into a character's starting modifier set.
     pub fn apply_to(&self, set: &mut ModifierSet) {
         if self.vitality_ranks > 0 {
-            set.add("Vitality", self.vitality_ranks as f32 * VITALITY_PER_RANK);
+            set.add(attr::VITALITY, self.vitality_ranks as f32 * VITALITY_PER_RANK);
         }
         if self.damage_ranks > 0 {
-            set.add("Damage", self.damage_ranks as f32 * DAMAGE_PER_RANK);
+            set.add(attr::DAMAGE, self.damage_ranks as f32 * DAMAGE_PER_RANK);
         }
         if self.move_speed_ranks > 0 {
-            set.add("MoveSpeed", self.move_speed_ranks as f32 * MOVE_SPEED_PER_RANK);
+            set.add(attr::MOVE_SPEED, self.move_speed_ranks as f32 * MOVE_SPEED_PER_RANK);
         }
     }
 }

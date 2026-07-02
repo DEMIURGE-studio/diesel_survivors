@@ -12,6 +12,7 @@ use crate::attributes::{Died, PickupRadius};
 use crate::data::items::{ItemDef, ALL};
 use crate::enemy::Enemy;
 use crate::player::Player;
+use crate::stats::attr;
 use crate::states::{AppState, PlayingState};
 use crate::ui::{button, title};
 
@@ -100,7 +101,9 @@ struct AbilityStat {
 }
 
 const ABILITY_STATS: [AbilityStat; 4] = [
-    AbilityStat { label: "Damage", stat: "Damage", op: Op::AddPct },
+    // `Damage` is the shared player/ability multiplier (canonical name); the
+    // `*Base` stats are the ability-local schema authored in `ability_base`.
+    AbilityStat { label: "Damage", stat: attr::DAMAGE, op: Op::AddPct },
     AbilityStat { label: "Cooldown", stat: "CooldownBase", op: Op::SubPct },
     AbilityStat { label: "Area", stat: "AreaBase", op: Op::AddPct },
     AbilityStat { label: "Speed", stat: "ProjectileSpeedBase", op: Op::AddPct },
@@ -127,15 +130,15 @@ struct GlobalUpgrade {
 }
 
 const GLOBAL_UPGRADES: [GlobalUpgrade; 9] = [
-    GlobalUpgrade { label: "Power", stat: "Damage", op: Op::AddPct },
-    GlobalUpgrade { label: "Swiftness", stat: "AttackSpeed", op: Op::AddPct },
-    GlobalUpgrade { label: "Expanse", stat: "Area", op: Op::AddPct },
-    GlobalUpgrade { label: "Velocity", stat: "ProjectileSpeed", op: Op::AddPct },
-    GlobalUpgrade { label: "Cooldown", stat: "CooldownMult", op: Op::SubPct },
-    GlobalUpgrade { label: "Multishot", stat: "ProjectileCount", op: Op::AddFlat(1.0) },
-    GlobalUpgrade { label: "Vigor", stat: "Vitality", op: Op::AddPct },
-    GlobalUpgrade { label: "Fleet", stat: "MoveSpeed", op: Op::AddPct },
-    GlobalUpgrade { label: "Magnet", stat: "PickupRadius", op: Op::AddPct },
+    GlobalUpgrade { label: "Power", stat: attr::DAMAGE, op: Op::AddPct },
+    GlobalUpgrade { label: "Swiftness", stat: attr::ATTACK_SPEED, op: Op::AddPct },
+    GlobalUpgrade { label: "Expanse", stat: attr::AREA, op: Op::AddPct },
+    GlobalUpgrade { label: "Velocity", stat: attr::PROJECTILE_SPEED, op: Op::AddPct },
+    GlobalUpgrade { label: "Cooldown", stat: attr::COOLDOWN_MULT, op: Op::SubPct },
+    GlobalUpgrade { label: "Multishot", stat: attr::PROJECTILE_COUNT, op: Op::AddFlat(1.0) },
+    GlobalUpgrade { label: "Vigor", stat: attr::VITALITY, op: Op::AddPct },
+    GlobalUpgrade { label: "Fleet", stat: attr::MOVE_SPEED, op: Op::AddPct },
+    GlobalUpgrade { label: "Magnet", stat: attr::PICKUP_RADIUS, op: Op::AddPct },
 ];
 
 /// One choice on the level-up screen. Each carries its pre-rolled tier so the

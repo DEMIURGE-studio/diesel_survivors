@@ -8,8 +8,8 @@
 //! ```text
 //! Item (StateMachine, Ability, attrs = ability base + item local)
 //! └── EquipZone (InitialState = Stored)
-//!     ├── Stored      ──EquipIt──▶ Equipped
-//!     └── Equipped    state(Equipped) + wearer sustained mods   ──Unequip──▶ Stored
+//!     ├── Stored      ──EquipIt──> Equipped
+//!     └── Equipped    state(Equipped) + wearer sustained mods   ──Unequip──> Stored
 //!         └── <ability region>   e.g. Ready→Invoking→Cooldown (auto-fire loop)
 //! ```
 //!
@@ -29,6 +29,7 @@ use diesel_avian3d::prelude::*;
 
 use crate::ability::SlotItem;
 use crate::data::abilities::state;
+use crate::stats::attr;
 use crate::states::AppState;
 
 use super::{Item, ItemDef};
@@ -142,8 +143,8 @@ pub fn equipped_item(player: Entity, def: &'static ItemDef) -> impl Scene {
     for entry in local.entries() {
         attrs.add_tagged(&entry.attribute, entry.value.clone(), entry.tag);
     }
-    if !attrs.entries().iter().any(|e| e.attribute == "Damage") {
-        attrs.add("Damage", 1.0);
+    if !attrs.entries().iter().any(|e| e.attribute == attr::DAMAGE) {
+        attrs.add(attr::DAMAGE, 1.0);
     }
 
     let root_extras = (ability.root_extras)();

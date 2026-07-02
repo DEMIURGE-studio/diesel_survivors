@@ -16,6 +16,7 @@ use diesel_avian3d::gauge::prelude::ModifierSet;
 use diesel_avian3d::prelude::*;
 
 use super::abilities::state;
+use crate::stats::attr;
 
 const RAGE_DURATION: f32 = 6.0;
 /// Flat bonus added to the player's `Damage` while raging.
@@ -54,13 +55,13 @@ fn timed_buff(
 /// Rage: a temporary flat boost to `Damage`.
 pub fn rage(player: Entity) -> Box<dyn Scene> {
     let mut mods = ModifierSet::new();
-    mods.add("Damage", RAGE_BONUS);
+    mods.add(attr::DAMAGE, RAGE_BONUS);
     Box::new(timed_buff(player, "Rage", RAGE_DURATION, mods))
 }
 
 /// Haste: a temporary flat boost to `MoveSpeed`.
 pub fn haste(player: Entity) -> Box<dyn Scene> {
     let mut mods = ModifierSet::new();
-    mods.add("MoveSpeed", HASTE_BONUS);
+    mods.add(attr::MOVE_SPEED, HASTE_BONUS);
     Box::new(timed_buff(player, "Haste", HASTE_DURATION, mods))
 }

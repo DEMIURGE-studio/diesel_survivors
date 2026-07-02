@@ -4,9 +4,10 @@
 //! `MaxHealth = Vitality * 10 + 50` are authored *per entity* as modifiers in
 //! the spawn scene. The "schema" is therefore a shared convention living here:
 //!
-//! - [`attr`]: canonical attribute names, for Rust-side reads
-//!   (`attributes.value(e, attr::HEALTH)`). The `attributes!` macro needs string
-//!   *literals*, so these constants are not used inside the block.
+//! - [`attr`]: canonical attribute names, used both for Rust-side reads
+//!   (`attributes.value(e, attr::MAX_HEALTH)`) and directly as the keys in the
+//!   `mod_set!`/`attributes!` blocks below (the macros accept any `&str` path,
+//!   not just string literals), so a rename flows from one place.
 //! - [`core_stats`]: the default block every character/enemy composes in, so the
 //!   relationships (Vitality drives MaxHealth, etc.) are defined once.
 //!
@@ -42,8 +43,8 @@ use diesel_avian3d::prelude::*;
 
 use crate::damage::DamageTags;
 
-/// Canonical attribute names for Rust-side reads. Keep in sync with the literals
-/// in [`core_stats`].
+/// Canonical attribute names. Used both for Rust-side reads and as the keys in
+/// [`core_mod_set`] / [`enemy_stats`], so each name has a single source of truth.
 pub mod attr {
     pub const VITALITY: &str = "Vitality";
     pub const MAX_HEALTH: &str = "MaxHealth";
@@ -68,19 +69,19 @@ pub mod attr {
 /// the core gauge demonstration.
 pub fn core_mod_set(vitality: f32, move_speed: f32) -> ModifierSet {
     mod_set! {
-        "Vitality" => vitality,
-        "MaxHealth" => "Vitality * 10.0",
-        "MoveSpeed" => move_speed,
-        "Damage" => 10.0,
-        "AttackSpeed" => 1.0,
-        "CooldownMult" => 1.0,
-        "Area" => 1.0,
-        "ProjectileCount" => 1.0,
+        attr::VITALITY => vitality,
+        attr::MAX_HEALTH => "Vitality * 10.0",
+        attr::MOVE_SPEED => move_speed,
+        attr::DAMAGE => 10.0,
+        attr::ATTACK_SPEED => 1.0,
+        attr::COOLDOWN_MULT => 1.0,
+        attr::AREA => 1.0,
+        attr::PROJECTILE_COUNT => 1.0,
         // 1.0 = nominal; abilities multiply their base speed by this scale.
-        "ProjectileSpeed" => 1.0,
-        "CritChance" => 0.05,
-        "CritMult" => 2.0,
-        "PickupRadius" => 2.5,
+        attr::PROJECTILE_SPEED => 1.0,
+        attr::CRIT_CHANCE => 0.05,
+        attr::CRIT_MULT => 2.0,
+        attr::PICKUP_RADIUS => 2.5,
     }
 }
 
@@ -91,6 +92,6 @@ pub fn core_mod_set(vitality: f32, move_speed: f32) -> ModifierSet {
 /// elements (`[DamageTags::FIRE] => 0.5`) per enemy archetype later.
 pub fn enemy_stats(vitality: f32, move_speed: f32) -> AttributeInitializer {
     let mut set = core_mod_set(vitality, move_speed);
-    set.add_tagged("Resistance", 0.30, DamageTags::PHYSICAL);
+    set.add_tagged(attr::RESISTANCE, 0.30, DamageTags::PHYSICAL);
     AttributeInitializer::new(set)
 }

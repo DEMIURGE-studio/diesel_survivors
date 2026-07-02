@@ -15,7 +15,7 @@ use crate::data::items::ItemDef;
 use crate::layers::{Layer, Team};
 use crate::meta::MetaProgress;
 use crate::player::{MoveInput, Player};
-use crate::stats::core_mod_set;
+use crate::stats::{attr, core_mod_set};
 
 pub mod arcane_storm;
 pub mod fireball;
@@ -59,7 +59,7 @@ pub fn all() -> [Character; 8] {
 /// so volley abilities show their spread and homing curve.
 pub(crate) fn test_stats() -> ModifierSet {
     let mut set = core_mod_set(12.0, 5.0);
-    set.add("ProjectileCount", 1.0);
+    set.add(attr::PROJECTILE_COUNT, 1.0);
     set
 }
 

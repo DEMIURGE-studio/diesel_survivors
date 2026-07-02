@@ -19,6 +19,7 @@ use diesel_avian3d::gauge::prelude::ModifierSet;
 use diesel_avian3d::prelude::*;
 
 use super::abilities::{self, AbilityDef, AbilityStats};
+use crate::stats::attr;
 
 pub mod machine;
 
@@ -98,7 +99,7 @@ fn sword_local() -> ModifierSet {
 }
 /// A sword keeps the wielder light on their feet.
 fn sword_wearer() -> ModifierSet {
-    mod_set! { "MoveSpeed" => 0.5 }
+    mod_set! { attr::MOVE_SPEED => 0.5 }
 }
 /// A bow's local damage: Arrow reads this via `@item`.
 fn bow_local() -> ModifierSet {
@@ -106,7 +107,7 @@ fn bow_local() -> ModifierSet {
 }
 /// A bow trains a faster draw: quicker projectiles while wielded.
 fn bow_wearer() -> ModifierSet {
-    mod_set! { "ProjectileSpeed" => 0.2 }
+    mod_set! { attr::PROJECTILE_SPEED => 0.2 }
 }
 
 // ---------------------------------------------------------------------------
