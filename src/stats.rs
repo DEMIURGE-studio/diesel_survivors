@@ -38,8 +38,8 @@
 //! Current health lives on the [`Health`] component (not an attribute),
 //! initialized from `MaxHealth` and written back so expressions can reference it.
 
-use diesel_avian3d::gauge::prelude::{AttributeInitializer, ModifierSet};
-use diesel_avian3d::prelude::*;
+use bevy_gauge::prelude::{AttributeInitializer, ModifierSet};
+use bevy_gauge::prelude::*;
 
 use crate::damage::DamageTags;
 

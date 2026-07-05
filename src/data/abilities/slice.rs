@@ -8,6 +8,8 @@
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
+use bevy_gauge::prelude::*;
+use bevy_gearbox::prelude::*;
 
 use super::{ability_base, AbilityDef, AbilityStats};
 use crate::damage::{DamageEffect, HitEffect};
@@ -26,7 +28,7 @@ pub static DEF: AbilityDef = AbilityDef {
     stats: AbilityStats { cooldown: true, area: true, projectile_speed: false },
 };
 
-fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+fn base() -> bevy_gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, None, Some(ARC_RADIUS))
 }
 
@@ -42,7 +44,7 @@ fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
                     #Sweep SubEffectOf(#Fire) InvokedBy(#Fire)
                         template(|_| Ok(TargetMutator::invoker()
                             .with_gatherer(AvianGatherer::AllEntitiesInRadius(ARC_RADIUS))))
-                        template(|_| Ok(bevy_gauge::attributes! {
+                        template(|_| Ok(attributes! {
                             "TargetMutator.gatherer" => "Area@ability"
                         }))
                     Substates [

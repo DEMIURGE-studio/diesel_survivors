@@ -5,9 +5,11 @@
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
+use bevy_gauge::prelude::*;
+use bevy_gearbox::prelude::*;
 
 use super::{
-    ability_base, configure_root_spawn, configure_zone_spawn, state, AbilityDef, AbilityStats,
+    ability_base, configure_root_spawn, configure_zone_spawn, AbilityDef, AbilityStats,
     Lifetime, ProjectileAssets,
 };
 use crate::damage::{DamageEffect, HitEffect};
@@ -29,7 +31,7 @@ pub static DEF: AbilityDef = AbilityDef {
     stats: AbilityStats { cooldown: true, area: true, projectile_speed: false },
 };
 
-fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+fn base() -> bevy_gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, None, Some(STORM_RADIUS))
 }
 
@@ -69,7 +71,7 @@ fn zone() -> impl Scene {
                     configure_root_spawn(PULSE),
                 ),
             ],
-            #Done state(DelayedDespawn::now()),
+            #Done GoOffConfig::root() DespawnEffect,
         ]
     }
 }
@@ -90,7 +92,7 @@ fn pulse() -> impl Scene {
             Substates [
                 #AoE SubEffectOf(#Active) InvokedBy(#Root)
                     TargetMutator::root_gathering(AvianGatherer::AllEntitiesInRadius(STORM_RADIUS))
-                    template(|_| Ok(bevy_gauge::attributes! { "TargetMutator.gatherer" => "Area@ability" }))
+                    template(|_| Ok(attributes! { "TargetMutator.gatherer" => "Area@ability" }))
                 Substates [
                     (SubEffectOf(#AoE) InvokedBy(#Root)
                         Name::new("Chill")

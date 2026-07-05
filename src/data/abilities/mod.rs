@@ -10,8 +10,9 @@
 use bevy::ecs::template::EntityTemplate;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use diesel_avian3d::gauge::prelude::ModifierSet;
+use bevy_gauge::prelude::ModifierSet;
 use diesel_avian3d::prelude::*;
+use bevy_gearbox::prelude::*;
 use diesel_avian3d::DirectionOffset;
 
 pub mod arcane_storm;
@@ -161,7 +162,7 @@ pub(crate) fn storm_zone(
             ]
         Substates [
             #RepeaterSlot repeater(#Root, waves, wave_interval, spawn),
-            #Done state(DelayedDespawn::now()),
+            #Done GoOffConfig::root() DespawnEffect,
         ]
     }
 }

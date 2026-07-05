@@ -11,6 +11,7 @@ use avian3d::prelude::ColliderDisabled;
 use bevy::prelude::*;
 use bevy::scene::prelude::CommandsSceneExt;
 use diesel_avian3d::prelude::*;
+use bevy_gearbox::prelude::*;
 use rand::Rng;
 
 use crate::data::abilities::{

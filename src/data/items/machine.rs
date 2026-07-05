@@ -23,9 +23,11 @@ use avian3d::prelude::ColliderDisabled;
 use bevy::ecs::template::EntityTemplate;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use diesel_avian3d::gauge::prelude::AttributeInitializer;
-use diesel_avian3d::gearbox::{AcceptAll, GearboxMessage};
+use bevy_gauge::prelude::AttributeInitializer;
+use bevy_gearbox::{AcceptAll, GearboxMessage};
 use diesel_avian3d::prelude::*;
+use bevy_gauge::prelude::*;
+use bevy_gearbox::prelude::*;
 
 use crate::ability::SlotItem;
 use crate::data::abilities::state;
@@ -115,7 +117,7 @@ where
             #Cooldown Transitions [
                 (Target(#Ready) AlwaysEdge Delay::from_secs_f32(cooldown_secs)
                     InvokedBy(root)
-                    template(|_| Ok(bevy_gauge::attributes! { "Delay" => "Cooldown@ability" })))
+                    template(|_| Ok(attributes! { "Delay" => "Cooldown@ability" })))
             ],
         ]
     }

@@ -5,8 +5,10 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
+use bevy_gauge::prelude::*;
+use bevy_gearbox::prelude::*;
 
-use super::{ability_base, configure_projectile_spawn, state, AbilityDef, AbilityStats, Homing, Lifetime, ProjectileAssets};
+use super::{ability_base, configure_projectile_spawn, AbilityDef, AbilityStats, Homing, Lifetime, ProjectileAssets};
 use crate::damage::{DamageEffect, HitEffect};
 use crate::layers::{Layer, TeamFilter};
 
@@ -26,7 +28,7 @@ pub static DEF: AbilityDef = AbilityDef {
     stats: AbilityStats { cooldown: true, area: true, projectile_speed: true },
 };
 
-fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+fn base() -> bevy_gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, Some(SPEED), Some(EXPLOSION_RADIUS))
 }
 
@@ -36,7 +38,7 @@ fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
             root,
             "ProjectileCount@invoker",
             "0.12 / AttackSpeed@invoker",
-            configure_projectile_spawn(PROJECTILE),
+            configure_projectile_spawn("abilities/fireball_projectile"),
         )
     }))
 }
@@ -53,7 +55,7 @@ fn projectile() -> impl Scene {
         #Root
             Name::new("Fireball")
             LinearProjectileEffect { speed: SPEED, horizontal: true }
-            template(|_| Ok(bevy_gauge::attributes! { "Speed" => "ProjectileSpeed@ability" }))
+            template(|_| Ok(attributes! { "Speed" => "ProjectileSpeed@ability" }))
             Homing { turn_rate: 5.0 }
             TeamFilter::Enemies
             CollisionLayers::new([Layer::Projectile], [Layer::Character])
@@ -74,7 +76,7 @@ fn projectile() -> impl Scene {
             ] Transitions [
                 (Target(#Done) AlwaysEdge)
             ],
-            #Done state(DelayedDespawn::now()),
+            #Done GoOffConfig::root() DespawnEffect,
         ]
     }
 }
@@ -99,7 +101,7 @@ fn explosion() -> impl Scene {
                     // Gauge-drive the gather radius: the gatherer's single field
                     // resolves against `"TargetMutator.gatherer"`, aliased to the
                     // spell's `Area` so an upgrade scales every explosion.
-                    template(|_| Ok(bevy_gauge::attributes! { "TargetMutator.gatherer" => "Area@ability" }))
+                    template(|_| Ok(attributes! { "TargetMutator.gatherer" => "Area@ability" }))
                 Substates [
                     (SubEffectOf(#AoE) InvokedBy(#Root)
                         Name::new("Burn")

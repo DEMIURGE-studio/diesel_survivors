@@ -5,7 +5,7 @@ use std::fs;
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, CommandsSceneExt};
-use diesel_avian3d::gauge::prelude::ModifierSet;
+use bevy_gauge::prelude::ModifierSet;
 use serde::{Deserialize, Serialize};
 
 use crate::attributes::Died;

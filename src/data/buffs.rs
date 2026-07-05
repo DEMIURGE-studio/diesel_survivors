@@ -12,10 +12,10 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use diesel_avian3d::gauge::prelude::ModifierSet;
+use bevy_gauge::prelude::ModifierSet;
 use diesel_avian3d::prelude::*;
+use bevy_gearbox::prelude::*;
 
-use super::abilities::state;
 use crate::stats::attr;
 
 const RAGE_DURATION: f32 = 6.0;
@@ -47,7 +47,7 @@ fn timed_buff(
                 Transitions [
                     (Target(#Done) AlwaysEdge Delay::from_secs_f32(duration))
                 ],
-            #Done state(DelayedDespawn::now()),
+            #Done GoOffConfig::root() DespawnEffect,
         ]
     }
 }

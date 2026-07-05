@@ -10,7 +10,7 @@
 //! attribute graphs, and subtracts from the defender's [`Health`] component.
 
 use bevy::prelude::*;
-use diesel_avian3d::gauge::prelude::*;
+use bevy_gauge::prelude::*;
 use diesel_avian3d::prelude::*;
 
 use crate::attributes::Health;
@@ -72,7 +72,7 @@ pub struct DamagePlugin;
 impl Plugin for DamagePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_tags).add_systems(
-            diesel_avian3d::gearbox::GearboxSchedule,
+            bevy_gearbox::GearboxSchedule,
             damage_effect_system.in_set(diesel_avian3d::bevy_diesel::DieselSet::Effects),
         );
     }

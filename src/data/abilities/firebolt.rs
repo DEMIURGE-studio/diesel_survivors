@@ -5,8 +5,10 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
+use bevy_gauge::prelude::*;
+use bevy_gearbox::prelude::*;
 
-use super::{ability_base, configure_projectile_spawn, state, AbilityDef, AbilityStats, ProjectileAssets};
+use super::{ability_base, configure_projectile_spawn, AbilityDef, AbilityStats, ProjectileAssets};
 use crate::damage::{DamageEffect, HitEffect};
 use crate::layers::{Layer, TeamFilter};
 
@@ -23,7 +25,7 @@ pub static DEF: AbilityDef = AbilityDef {
     stats: AbilityStats { cooldown: true, area: false, projectile_speed: true },
 };
 
-fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+fn base() -> bevy_gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, Some(SPEED), None)
 }
 
@@ -49,7 +51,7 @@ fn projectile() -> impl Scene {
         #Root
             Name::new("Firebolt")
             LinearProjectileEffect { speed: SPEED, horizontal: true }
-            template(|_| Ok(bevy_gauge::attributes! { "Speed" => "ProjectileSpeed@ability" }))
+            template(|_| Ok(attributes! { "Speed" => "ProjectileSpeed@ability" }))
             TeamFilter::Enemies
             CollisionLayers::new([Layer::Projectile], [Layer::Character])
             Collider::sphere(0.35)
@@ -70,7 +72,7 @@ fn projectile() -> impl Scene {
             ] Transitions [
                 (Target(#Done) AlwaysEdge)
             ],
-            #Done state(DelayedDespawn::now()),
+            #Done GoOffConfig::root() DespawnEffect,
         ]
     }
 }

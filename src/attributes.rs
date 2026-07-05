@@ -3,7 +3,7 @@
 //! graph, writes push back so expressions elsewhere can use them.
 
 use bevy::prelude::*;
-use diesel_avian3d::gauge::prelude::AttributeComponent;
+use bevy_gauge::prelude::AttributeComponent;
 
 use crate::states::PlayingState;
 

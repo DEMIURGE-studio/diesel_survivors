@@ -7,9 +7,11 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
+use bevy_gauge::prelude::*;
+use bevy_gearbox::prelude::*;
 use diesel_avian3d::DirectionOffset;
 
-use super::{ability_base, state, storm_zone, AbilityDef, AbilityStats, Lifetime, ProjectileAssets};
+use super::{ability_base, storm_zone, AbilityDef, AbilityStats, Lifetime, ProjectileAssets};
 use crate::damage::{DamageEffect, HitEffect};
 use crate::layers::{Layer, TeamFilter};
 
@@ -38,7 +40,7 @@ pub static DEF: AbilityDef = AbilityDef {
     stats: AbilityStats { cooldown: true, area: true, projectile_speed: false },
 };
 
-fn base() -> diesel_avian3d::gauge::prelude::ModifierSet {
+fn base() -> bevy_gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, None, Some(METEOR_RADIUS))
 }
 
@@ -105,7 +107,7 @@ fn meteor() -> impl Scene {
             ] Transitions [
                 (Target(#Done) AlwaysEdge)
             ],
-            #Done state(DelayedDespawn::now()),
+            #Done GoOffConfig::root() DespawnEffect,
         ]
     }
 }
@@ -126,7 +128,7 @@ fn burst() -> impl Scene {
             Substates [
                 #AoE SubEffectOf(#Active) InvokedBy(#Root)
                     TargetMutator::root_gathering(AvianGatherer::AllEntitiesInRadius(METEOR_RADIUS))
-                    template(|_| Ok(bevy_gauge::attributes! { "TargetMutator.gatherer" => "Area@ability" }))
+                    template(|_| Ok(attributes! { "TargetMutator.gatherer" => "Area@ability" }))
                 Substates [
                     (SubEffectOf(#AoE) InvokedBy(#Root)
                         Name::new("Scorch")
