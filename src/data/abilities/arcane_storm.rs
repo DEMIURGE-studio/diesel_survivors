@@ -35,7 +35,7 @@ pub static DEF: AbilityDef = AbilityDef {
     stats: AbilityStats { cooldown: true, area: false, projectile_speed: true },
 };
 
-fn base() -> bevy_gauge::prelude::ModifierSet {
+fn base() -> bevy_diesel::gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, Some(SPEED), None)
 }
 

@@ -23,11 +23,11 @@ use avian3d::prelude::ColliderDisabled;
 use bevy::ecs::template::EntityTemplate;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use bevy_gauge::prelude::AttributeInitializer;
-use bevy_gearbox::{AcceptAll, GearboxMessage};
+use bevy_diesel::gauge::prelude::AttributeInitializer;
+use bevy_diesel::gearbox::{AcceptAll, GearboxMessage};
 use diesel_avian3d::prelude::*;
-use bevy_gauge::prelude::*;
-use bevy_gearbox::prelude::*;
+use bevy_diesel::gauge::prelude::*;
+use bevy_diesel::gearbox::prelude::*;
 
 use crate::ability::SlotItem;
 use crate::data::abilities::state;

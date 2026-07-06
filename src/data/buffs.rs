@@ -12,9 +12,9 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use bevy_gauge::prelude::ModifierSet;
+use bevy_diesel::gauge::prelude::ModifierSet;
 use diesel_avian3d::prelude::*;
-use bevy_gearbox::prelude::*;
+use bevy_diesel::gearbox::prelude::*;
 
 use crate::stats::attr;
 

@@ -15,8 +15,8 @@
 //! applies the passive lives in [`crate::ability`]. Slots hold `&'static ItemDef`.
 
 use bevy::prelude::*;
-use bevy_gauge::prelude::ModifierSet;
-use bevy_gauge::prelude::*;
+use bevy_diesel::gauge::prelude::ModifierSet;
+use bevy_diesel::gauge::prelude::*;
 
 use super::abilities::{self, AbilityDef, AbilityStats};
 use crate::stats::attr;

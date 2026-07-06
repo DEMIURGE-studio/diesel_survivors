@@ -6,8 +6,7 @@ edition = "2024"
 [dependencies]
 bevy = "0.19"
 diesel_avian3d = { path = "../bevy_diesel/backends/diesel_avian3d", features = ["server", "diesel_diagnostics"] }
-bevy_gauge = { path = "../bevy_gauge" }
-bevy_gearbox = { path = "../bevy_gearbox" }
+bevy_diesel = "0.4"
 avian3d = "0.7"
 rand = "0.9"
 serde = { version = "1", features = ["derive"] }

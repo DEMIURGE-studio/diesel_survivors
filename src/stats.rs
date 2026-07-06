@@ -38,8 +38,8 @@
 //! Current health lives on the [`Health`] component (not an attribute),
 //! initialized from `MaxHealth` and written back so expressions can reference it.
 
-use bevy_gauge::prelude::{AttributeInitializer, ModifierSet};
-use bevy_gauge::prelude::*;
+use bevy_diesel::gauge::prelude::{AttributeInitializer, ModifierSet};
+use bevy_diesel::gauge::prelude::*;
 
 use crate::damage::DamageTags;
 

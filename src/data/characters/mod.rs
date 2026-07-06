@@ -6,7 +6,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use bevy_gauge::prelude::{AttributeInitializer, ModifierSet};
+use bevy_diesel::gauge::prelude::{AttributeInitializer, ModifierSet};
 use diesel_avian3d::prelude::*;
 
 use crate::ability::Inventory;

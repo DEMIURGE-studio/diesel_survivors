@@ -4,8 +4,8 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
-use bevy_gauge::prelude::*;
-use bevy_gearbox::prelude::*;
+use bevy_diesel::gauge::prelude::*;
+use bevy_diesel::gearbox::prelude::*;
 
 use super::{ability_base, configure_projectile_spawn, AbilityDef, AbilityStats, Homing, ProjectileAssets};
 use crate::damage::{DamageEffect, HitEffect};
@@ -24,7 +24,7 @@ pub static DEF: AbilityDef = AbilityDef {
     stats: AbilityStats { cooldown: true, area: false, projectile_speed: true },
 };
 
-fn base() -> bevy_gauge::prelude::ModifierSet {
+fn base() -> bevy_diesel::gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, Some(SPEED), None)
 }
 

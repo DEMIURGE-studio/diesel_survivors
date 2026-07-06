@@ -4,7 +4,7 @@
 //! the inventory panel) is what the equip system reconciles into a live ability.
 
 use bevy::prelude::*;
-use bevy_gauge::prelude::{AttributesMut, InstantExt};
+use bevy_diesel::gauge::prelude::{AttributesMut, InstantExt};
 use rand::Rng;
 
 use crate::ability::{Inventory, SlotItem};
@@ -83,7 +83,7 @@ enum Op {
 /// Apply an upgrade to one attribute on `entity`. Builds the [`InstantModifierSet`]
 /// by hand so the attribute name can be dynamic.
 fn apply_op(stat: &str, op: Op, pct: f32, entity: Entity, attrs: &mut AttributesMut) {
-    use bevy_gauge::prelude::InstantModifierSet;
+    use bevy_diesel::gauge::prelude::InstantModifierSet;
     let mut inst = InstantModifierSet::new();
     match op {
         Op::AddPct => inst.push_add(stat, format!("{stat} * {pct}").as_str()),

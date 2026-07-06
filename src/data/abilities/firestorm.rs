@@ -7,8 +7,8 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
-use bevy_gauge::prelude::*;
-use bevy_gearbox::prelude::*;
+use bevy_diesel::gauge::prelude::*;
+use bevy_diesel::gearbox::prelude::*;
 use diesel_avian3d::DirectionOffset;
 
 use super::{ability_base, storm_zone, AbilityDef, AbilityStats, Lifetime, ProjectileAssets};
@@ -40,7 +40,7 @@ pub static DEF: AbilityDef = AbilityDef {
     stats: AbilityStats { cooldown: true, area: true, projectile_speed: false },
 };
 
-fn base() -> bevy_gauge::prelude::ModifierSet {
+fn base() -> bevy_diesel::gauge::prelude::ModifierSet {
     ability_base(COOLDOWN, None, Some(METEOR_RADIUS))
 }
 

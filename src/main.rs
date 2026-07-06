@@ -43,7 +43,7 @@ fn main() {
             PhysicsPlugins::default(),
             AvianBackend::plugin(),
             CollisionFilterPlugin::<TeamFilter>::default(),
-            bevy_gearbox::server::ServerPlugin::default(),
+            bevy_diesel::gearbox::server::ServerPlugin::default(),
         ))
         .init_state::<AppState>()
         .add_sub_state::<PlayingState>()

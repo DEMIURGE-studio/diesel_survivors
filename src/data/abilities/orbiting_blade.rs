@@ -6,7 +6,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use diesel_avian3d::prelude::*;
-use bevy_gearbox::prelude::*;
+use bevy_diesel::gearbox::prelude::*;
 
 use super::{AbilityDef, AbilityStats, Orbiter, ProjectileAssets};
 use crate::damage::{DamageEffect, HitEffect};
@@ -22,8 +22,8 @@ pub static DEF: AbilityDef = AbilityDef {
     stats: AbilityStats { cooldown: false, area: false, projectile_speed: false },
 };
 
-fn base() -> bevy_gauge::prelude::ModifierSet {
-    bevy_gauge::prelude::ModifierSet::new()
+fn base() -> bevy_diesel::gauge::prelude::ModifierSet {
+    bevy_diesel::gauge::prelude::ModifierSet::new()
 }
 
 /// The blade is a *persistent* weapon: its visuals, collider, and `Orbiter` live
