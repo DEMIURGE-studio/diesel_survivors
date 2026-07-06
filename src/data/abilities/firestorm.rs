@@ -96,7 +96,7 @@ fn meteor() -> impl Scene {
             StateMachine InitialState(#Flying)
         Substates [
             #Flying Transitions [
-                (Target(#Hit) MessageEdge::<CollidedEntity>::default()),
+                (Target(#Hit) MessageEdge::<CollidedEntity>),
                 // Safety net: despawn if it never collides.
                 (Target(#Done) AlwaysEdge Delay::from_secs_f32(4.0)),
             ],

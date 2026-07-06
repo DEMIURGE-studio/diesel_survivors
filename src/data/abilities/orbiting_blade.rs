@@ -53,7 +53,7 @@ fn region(root: bevy::ecs::template::EntityTemplate) -> Box<dyn Scene> {
         InitialState(#Active)
         Substates [
             #Active Transitions [
-                (Target(#Active) MessageEdge::<CollidedEntity>::default())
+                (Target(#Active) MessageEdge::<CollidedEntity>)
             ] Substates [
                 (SubEffectOf(#Active) InvokedBy(root)
                     Name::new("Slash")

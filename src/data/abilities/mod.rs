@@ -158,7 +158,7 @@ pub(crate) fn storm_zone(
             Name::new(name)
             StateMachine InitialState(#RepeaterSlot)
             Transitions [
-                (Target(#Done) MessageEdge::<Done>::default())
+                (Target(#Done) MessageEdge::<Done>)
             ]
         Substates [
             #RepeaterSlot repeater(#Root, waves, wave_interval, spawn),

@@ -66,7 +66,7 @@ fn projectile() -> impl Scene {
             StateMachine InitialState(#Flying)
         Substates [
             #Flying Transitions [
-                (Target(#Hit) MessageEdge::<CollidedEntity>::default()),
+                (Target(#Hit) MessageEdge::<CollidedEntity>),
                 (Target(#Done) AlwaysEdge Delay::from_secs_f32(3.0)),
             ],
             #Hit Substates [

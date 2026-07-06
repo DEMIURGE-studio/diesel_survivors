@@ -64,7 +64,7 @@ fn zone() -> impl Scene {
             StateMachine InitialState(#Pulsing)
         Substates [
             #Pulsing Transitions [
-                (Target(#Done) MessageEdge::<Done>::default())
+                (Target(#Done) MessageEdge::<Done>)
             ] Substates [
                 #Inner repeater(
                     #Root, PULSE_COUNT, "0.5 / AttackSpeed@invoker",

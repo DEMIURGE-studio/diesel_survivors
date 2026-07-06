@@ -110,7 +110,7 @@ where
                 (Target(#Invoking) AlwaysEdge)
             ],
             #Invoking InitialState(#Inner) Transitions [
-                (Target(#Cooldown) MessageEdge::<Done>::default())
+                (Target(#Cooldown) MessageEdge::<Done>)
             ] Substates [
                 #Inner make_inner(root)
             ],
@@ -178,14 +178,14 @@ fn equip_zone(root: EntityTemplate, def: &'static ItemDef) -> impl Scene {
         #EquipZone InitialState(#Stored)
         Substates [
             #Stored Transitions [
-                (Target(#Equipped) MessageEdge::<EquipIt>::default())
+                (Target(#Equipped) MessageEdge::<EquipIt>)
             ],
             #Equipped state(Equipped)
                 InvokedBy(root)
                 template(move |_| Ok(AttributeModifiers(wearer.clone())))
                 SustainedModifierConfig::invoker()
                 Transitions [
-                    (Target(#Stored) MessageEdge::<Unequip>::default())
+                    (Target(#Stored) MessageEdge::<Unequip>)
                 ]
                 { region }
         ]
